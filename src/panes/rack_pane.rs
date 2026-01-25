@@ -197,4 +197,14 @@ impl Pane for RackPane {
     fn keymap(&self) -> &Keymap {
         &self.keymap
     }
+
+    fn receive_action(&mut self, action: &Action) -> bool {
+        match action {
+            Action::AddModule(module_type) => {
+                self.rack.add_module(*module_type);
+                true
+            }
+            _ => false,
+        }
+    }
 }

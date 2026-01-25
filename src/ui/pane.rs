@@ -1,4 +1,5 @@
 use super::{Graphics, InputEvent, Keymap};
+use crate::state::ModuleType;
 
 /// Actions that can be returned from pane input handling
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -13,6 +14,8 @@ pub enum Action {
     PushPane(&'static str),
     /// Pop the current pane from the stack
     PopPane,
+    /// Add a module of the given type to the rack
+    AddModule(ModuleType),
 }
 
 /// Trait for UI panes (screens/views)
@@ -34,6 +37,12 @@ pub trait Pane {
 
     /// Called when this pane becomes inactive
     fn on_exit(&mut self) {}
+
+    /// Handle an action dispatched from elsewhere (e.g., another pane)
+    /// Returns true if the action was handled
+    fn receive_action(&mut self, _action: &Action) -> bool {
+        false
+    }
 }
 
 /// Manages a stack of panes with one active pane
@@ -114,5 +123,15 @@ impl PaneManager {
     /// Get all registered pane IDs
     pub fn pane_ids(&self) -> Vec<&'static str> {
         self.panes.iter().map(|p| p.id()).collect()
+    }
+
+    /// Dispatch an action to a specific pane by ID
+    /// Returns true if the pane was found and handled the action
+    pub fn dispatch_to(&mut self, id: &str, action: &Action) -> bool {
+        if let Some(pane) = self.panes.iter_mut().find(|p| p.id() == id) {
+            pane.receive_action(action)
+        } else {
+            false
+        }
     }
 }

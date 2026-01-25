@@ -343,8 +343,14 @@ fn run(backend: &mut RatatuiBackend) -> std::io::Result<()> {
         // Poll for input
         if let Some(event) = backend.poll_event(Duration::from_millis(16)) {
             let action = panes.handle_input(event);
-            if action == Action::Quit {
-                break;
+            match &action {
+                Action::Quit => break,
+                Action::AddModule(_) => {
+                    // Dispatch to rack pane and switch back
+                    panes.dispatch_to("rack", &action);
+                    panes.switch_to("rack");
+                }
+                _ => {}
             }
         }
 

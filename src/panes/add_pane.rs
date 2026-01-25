@@ -122,8 +122,12 @@ impl Pane for AddPane {
     fn handle_input(&mut self, event: InputEvent) -> Action {
         match self.keymap.lookup(&event) {
             Some("confirm") => {
-                // Return to rack pane - rack pane will handle the actual module addition
-                Action::SwitchPane("rack")
+                // Return the selected module type - main loop will add it to rack
+                if let Some(module_type) = self.items[self.selected].module_type {
+                    Action::AddModule(module_type)
+                } else {
+                    Action::None
+                }
             }
             Some("cancel") => Action::SwitchPane("rack"),
             Some("next") => {
