@@ -1,8 +1,10 @@
+use std::any::Any;
+
 use super::{Graphics, InputEvent, Keymap};
 use crate::state::ModuleType;
 
 /// Actions that can be returned from pane input handling
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Action {
     /// No action taken, continue as normal
     None,
@@ -16,6 +18,10 @@ pub enum Action {
     PopPane,
     /// Add a module of the given type to the rack
     AddModule(ModuleType),
+    /// Request to edit a module (sent by rack pane)
+    EditModule(crate::state::ModuleId),
+    /// Update a module's params (sent by edit pane when done)
+    UpdateModuleParams(crate::state::ModuleId, Vec<crate::state::Param>),
 }
 
 /// Trait for UI panes (screens/views)
@@ -43,6 +49,9 @@ pub trait Pane {
     fn receive_action(&mut self, _action: &Action) -> bool {
         false
     }
+
+    /// Return self as Any for downcasting (required for type-specific access)
+    fn as_any_mut(&mut self) -> &mut dyn Any;
 }
 
 /// Manages a stack of panes with one active pane
@@ -133,5 +142,13 @@ impl PaneManager {
         } else {
             false
         }
+    }
+
+    /// Get a mutable reference to a pane by ID, downcasted to a specific type
+    pub fn get_pane_mut<T: 'static>(&mut self, id: &str) -> Option<&mut T> {
+        self.panes
+            .iter_mut()
+            .find(|p| p.id() == id)
+            .and_then(|p| p.as_any_mut().downcast_mut::<T>())
     }
 }

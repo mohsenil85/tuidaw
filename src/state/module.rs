@@ -190,7 +190,7 @@ impl ModuleType {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Param {
     pub name: &'static str,
     pub value: ParamValue,
@@ -198,7 +198,7 @@ pub struct Param {
     pub max: f32,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ParamValue {
     Float(f32),
     Int(i32),

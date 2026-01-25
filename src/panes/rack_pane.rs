@@ -1,4 +1,6 @@
-use crate::state::{Module, ModuleType, Param, ParamValue, RackState};
+use std::any::Any;
+
+use crate::state::{Module, ModuleId, ModuleType, Param, ParamValue, RackState};
 use crate::ui::{Action, Color, Graphics, InputEvent, KeyCode, Keymap, Pane, Rect, Style};
 
 pub struct RackPane {
@@ -53,6 +55,20 @@ impl RackPane {
 
         parts.join("  ")
     }
+
+    /// Get module data for editing (returns id, name, type_name, params)
+    pub fn get_module_for_edit(&self, id: ModuleId) -> Option<(ModuleId, String, &'static str, Vec<Param>)> {
+        self.rack.modules.get(&id).map(|m| {
+            (m.id, m.name.clone(), m.module_type.name(), m.params.clone())
+        })
+    }
+
+    /// Update a module's params
+    pub fn update_module_params(&mut self, id: ModuleId, params: Vec<Param>) {
+        if let Some(module) = self.rack.modules.get_mut(&id) {
+            module.params = params;
+        }
+    }
 }
 
 impl Default for RackPane {
@@ -98,8 +114,11 @@ impl Pane for RackPane {
                 Action::None
             }
             Some("edit") => {
-                // For now, just return None - edit pane to be implemented later
-                Action::None
+                if let Some(module) = self.rack.selected_module() {
+                    Action::EditModule(module.id)
+                } else {
+                    Action::None
+                }
             }
             _ => Action::None,
         }
@@ -204,7 +223,15 @@ impl Pane for RackPane {
                 self.rack.add_module(*module_type);
                 true
             }
+            Action::UpdateModuleParams(id, params) => {
+                self.update_module_params(*id, params.clone());
+                true
+            }
             _ => false,
         }
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
     }
 }

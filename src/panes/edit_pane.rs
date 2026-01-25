@@ -1,8 +1,11 @@
-use crate::state::{Param, ParamValue};
+use std::any::Any;
+
+use crate::state::{ModuleId, Param, ParamValue};
 use crate::ui::{Action, Color, Graphics, InputEvent, KeyCode, Keymap, Pane, Rect, Style};
 
 pub struct EditPane {
     keymap: Keymap,
+    module_id: Option<ModuleId>,
     module_name: String,
     module_type_name: String,
     params: Vec<Param>,
@@ -10,7 +13,7 @@ pub struct EditPane {
 }
 
 impl EditPane {
-    pub fn new(module_name: String, module_type_name: &str, params: Vec<Param>) -> Self {
+    pub fn new() -> Self {
         Self {
             keymap: Keymap::new()
                 .bind_key(KeyCode::Escape, "done", "Done editing")
@@ -22,11 +25,31 @@ impl EditPane {
                 .bind_key(KeyCode::Up, "prev", "Previous parameter")
                 .bind_key(KeyCode::Left, "decrease", "Decrease value")
                 .bind_key(KeyCode::Right, "increase", "Increase value"),
-            module_name,
-            module_type_name: module_type_name.to_string(),
-            params,
+            module_id: None,
+            module_name: String::new(),
+            module_type_name: String::new(),
+            params: Vec::new(),
             selected_param: 0,
         }
+    }
+
+    /// Set the module to edit
+    pub fn set_module(&mut self, id: ModuleId, name: String, type_name: &str, params: Vec<Param>) {
+        self.module_id = Some(id);
+        self.module_name = name;
+        self.module_type_name = type_name.to_string();
+        self.params = params;
+        self.selected_param = 0;
+    }
+
+    /// Get the module ID being edited
+    pub fn module_id(&self) -> Option<ModuleId> {
+        self.module_id
+    }
+
+    /// Get the edited params (call when done editing)
+    pub fn params(&self) -> &[Param] {
+        &self.params
     }
 
     fn adjust_param(&mut self, increase: bool) {
@@ -135,7 +158,14 @@ impl Pane for EditPane {
 
     fn handle_input(&mut self, event: InputEvent) -> Action {
         match self.keymap.lookup(&event) {
-            Some("done") => Action::SwitchPane("rack"),
+            Some("done") => {
+                // Return updated params to be synced back to the rack
+                if let Some(id) = self.module_id {
+                    Action::UpdateModuleParams(id, self.params.clone())
+                } else {
+                    Action::SwitchPane("rack")
+                }
+            }
             Some("next") => {
                 if !self.params.is_empty() {
                     self.selected_param = (self.selected_param + 1) % self.params.len();
@@ -265,5 +295,15 @@ impl Pane for EditPane {
 
     fn keymap(&self) -> &Keymap {
         &self.keymap
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+}
+
+impl Default for EditPane {
+    fn default() -> Self {
+        Self::new()
     }
 }

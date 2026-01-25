@@ -1,3 +1,5 @@
+use std::any::Any;
+
 use crate::state::ModuleType;
 use crate::ui::{Action, Color, Graphics, InputEvent, KeyCode, Keymap, Pane, Rect, Style};
 
@@ -235,5 +237,9 @@ impl Pane for AddPane {
 
     fn keymap(&self) -> &Keymap {
         &self.keymap
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
     }
 }
