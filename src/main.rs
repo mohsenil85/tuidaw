@@ -8,13 +8,16 @@ use ui::{
     RatatuiBackend, Rect, Style,
 };
 
-/// Demo pane showing widgets
+// ============================================================================
+// Demo Pane - Form with widgets
+// ============================================================================
+
 struct DemoPane {
     keymap: Keymap,
     name_input: TextInput,
     email_input: TextInput,
     module_list: SelectList,
-    focus_index: Option<usize>, // None = nothing, Some(0) = name, Some(1) = email, Some(2) = list
+    focus_index: Option<usize>,
 }
 
 impl DemoPane {
@@ -40,13 +43,14 @@ impl DemoPane {
         Self {
             keymap: Keymap::new()
                 .bind('q', "quit", "Quit the application")
+                .bind('2', "goto_keymap", "Go to Keymap demo")
                 .bind_key(KeyCode::Tab, "next_field", "Move to next field")
                 .bind_key(KeyCode::Enter, "select", "Select current item")
                 .bind_key(KeyCode::Escape, "cancel", "Cancel/Go back"),
             name_input,
             email_input,
             module_list,
-            focus_index: None, // Nothing focused initially
+            focus_index: None,
         }
     }
 
@@ -58,8 +62,8 @@ impl DemoPane {
 
     fn next_focus(&mut self) {
         self.focus_index = match self.focus_index {
-            None => Some(0),     // Nothing -> first field
-            Some(2) => None,     // Last -> nothing (cycle complete)
+            None => Some(0),
+            Some(2) => None,
             Some(n) => Some(n + 1),
         };
         self.update_focus();
@@ -87,6 +91,7 @@ impl Pane for DemoPane {
         // Then check global keybindings
         match self.keymap.lookup(&event) {
             Some("quit") => Action::Quit,
+            Some("goto_keymap") => Action::SwitchPane("keymap"),
             Some("next_field") => {
                 self.next_focus();
                 Action::None
@@ -101,21 +106,17 @@ impl Pane for DemoPane {
         let box_height = 29;
         let rect = Rect::centered(width, height, box_width, box_height);
 
-        // Draw main box
         g.set_style(Style::new().fg(Color::BLACK));
-        g.draw_box(rect, Some(" tuidaw - Demo "));
+        g.draw_box(rect, Some(" [1] Form Demo "));
 
-        // Content area (inside the box)
         let content_x = rect.x + 2;
         let content_y = rect.y + 2;
         let content_width = rect.width - 4;
 
         // Draw text inputs
         let mut y = content_y;
-
         self.name_input.render(g, content_x, y, content_width / 2);
         y += 2;
-
         self.email_input.render(g, content_x, y, content_width / 2);
         y += 3;
 
@@ -139,10 +140,10 @@ impl Pane for DemoPane {
             g.set_style(Style::new().fg(Color::WHITE).bg(Color::BLACK));
             g.put_str(content_x, help_y, " Press Tab to start ");
             g.set_style(Style::new().fg(Color::GRAY));
-            g.put_str(content_x + 21, help_y, " | q: quit");
+            g.put_str(content_x + 21, help_y, " | 2: Keymap demo | q: quit");
         } else {
             g.set_style(Style::new().fg(Color::GRAY));
-            g.put_str(content_x, help_y, "Tab: next field | Enter: select | q: quit");
+            g.put_str(content_x, help_y, "Tab: next | 2: Keymap demo | q: quit");
         }
     }
 
@@ -150,6 +151,144 @@ impl Pane for DemoPane {
         &self.keymap
     }
 }
+
+// ============================================================================
+// Keymap Demo Pane - Shows introspectable keymaps
+// ============================================================================
+
+struct KeymapPane {
+    keymap: Keymap,
+    selected: usize,
+}
+
+impl KeymapPane {
+    fn new() -> Self {
+        Self {
+            keymap: Keymap::new()
+                .bind('q', "quit", "Quit the application")
+                .bind('1', "goto_form", "Go to Form demo")
+                .bind_key(KeyCode::Up, "move_up", "Move selection up")
+                .bind_key(KeyCode::Down, "move_down", "Move selection down")
+                .bind('j', "move_down", "Move selection down (vim)")
+                .bind('k', "move_up", "Move selection up (vim)")
+                .bind('g', "goto_top", "Go to top")
+                .bind('G', "goto_bottom", "Go to bottom")
+                .bind('/', "search", "Search keybindings"),
+            selected: 0,
+        }
+    }
+}
+
+impl Pane for KeymapPane {
+    fn id(&self) -> &'static str {
+        "keymap"
+    }
+
+    fn handle_input(&mut self, event: InputEvent) -> Action {
+        let binding_count = self.keymap.bindings().len();
+
+        match self.keymap.lookup(&event) {
+            Some("quit") => Action::Quit,
+            Some("goto_form") => Action::SwitchPane("demo"),
+            Some("move_up") => {
+                if self.selected > 0 {
+                    self.selected -= 1;
+                }
+                Action::None
+            }
+            Some("move_down") => {
+                if self.selected < binding_count.saturating_sub(1) {
+                    self.selected += 1;
+                }
+                Action::None
+            }
+            Some("goto_top") => {
+                self.selected = 0;
+                Action::None
+            }
+            Some("goto_bottom") => {
+                self.selected = binding_count.saturating_sub(1);
+                Action::None
+            }
+            _ => Action::None,
+        }
+    }
+
+    fn render(&self, g: &mut dyn Graphics) {
+        let (width, height) = g.size();
+        let box_width = 97;
+        let box_height = 29;
+        let rect = Rect::centered(width, height, box_width, box_height);
+
+        g.set_style(Style::new().fg(Color::BLACK));
+        g.draw_box(rect, Some(" [2] Keymap Demo "));
+
+        let content_x = rect.x + 2;
+        let content_y = rect.y + 2;
+
+        // Title
+        g.set_style(Style::new().fg(Color::BLACK));
+        g.put_str(content_x, content_y, "This pane's keybindings:");
+        g.put_str(content_x, content_y + 1, "(navigate with arrows or j/k)");
+
+        // Draw keymap entries
+        let bindings = self.keymap.bindings();
+        let list_y = content_y + 3;
+
+        for (i, binding) in bindings.iter().enumerate() {
+            let y = list_y + i as u16;
+            if y >= rect.y + rect.height - 3 {
+                break;
+            }
+
+            let is_selected = i == self.selected;
+
+            if is_selected {
+                g.set_style(Style::new().fg(Color::WHITE).bg(Color::BLACK));
+                g.put_str(content_x, y, "> ");
+            } else {
+                g.set_style(Style::new().fg(Color::BLACK));
+                g.put_str(content_x, y, "  ");
+            }
+
+            // Key display
+            let key_display = binding.pattern.display();
+            g.put_str(content_x + 2, y, &format!("{:12}", key_display));
+
+            // Action name
+            g.put_str(content_x + 15, y, &format!("{:15}", binding.action));
+
+            // Description
+            if is_selected {
+                g.set_style(Style::new().fg(Color::WHITE).bg(Color::BLACK));
+            } else {
+                g.set_style(Style::new().fg(Color::GRAY));
+            }
+            g.put_str(content_x + 31, y, binding.description);
+
+            // Clear to end of selection
+            if is_selected {
+                let desc_len = binding.description.len();
+                for x in (content_x + 31 + desc_len as u16)..(rect.x + rect.width - 2) {
+                    g.put_char(x, y, ' ');
+                }
+            }
+        }
+
+        // Draw help at bottom
+        let help_y = rect.y + rect.height - 2;
+        g.set_style(Style::new().fg(Color::GRAY));
+        g.put_str(content_x, help_y, "Up/Down or j/k: navigate | 1: Form demo | q: quit");
+    }
+
+    fn keymap(&self) -> &Keymap {
+        &self.keymap
+    }
+}
+
+// ============================================================================
+// Main
+// ============================================================================
 
 fn main() -> std::io::Result<()> {
     let mut backend = RatatuiBackend::new()?;
@@ -163,6 +302,7 @@ fn main() -> std::io::Result<()> {
 
 fn run(backend: &mut RatatuiBackend) -> std::io::Result<()> {
     let mut panes = PaneManager::new(Box::new(DemoPane::new()));
+    panes.add_pane(Box::new(KeymapPane::new()));
 
     loop {
         // Poll for input

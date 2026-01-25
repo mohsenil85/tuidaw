@@ -22,8 +22,8 @@ fn test_displays_box_with_title() {
 
     // Verify the box and title are displayed
     harness
-        .assert_screen_contains("tuidaw")
-        .expect("Should display 'tuidaw' title");
+        .assert_screen_contains("Form Demo")
+        .expect("Should display 'Form Demo' title");
 
     // Verify box borders are present (corner characters)
     let screen = harness.capture_screen().expect("Should capture screen");
