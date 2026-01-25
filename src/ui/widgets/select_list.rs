@@ -75,23 +75,23 @@ impl SelectList {
         }
 
         match event.key {
-            KeyCode::Up => {
+            KeyCode::Up | KeyCode::Char('p') | KeyCode::Char('k') => {
                 if self.selected > 0 {
                     self.selected -= 1;
                 }
                 true
             }
-            KeyCode::Down => {
+            KeyCode::Down | KeyCode::Char('n') | KeyCode::Char('j') => {
                 if self.selected < self.items.len() - 1 {
                     self.selected += 1;
                 }
                 true
             }
-            KeyCode::Home => {
+            KeyCode::Home | KeyCode::Char('g') => {
                 self.selected = 0;
                 true
             }
-            KeyCode::End => {
+            KeyCode::End | KeyCode::Char('G') => {
                 self.selected = self.items.len().saturating_sub(1);
                 true
             }

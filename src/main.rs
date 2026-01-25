@@ -169,8 +169,10 @@ impl KeymapPane {
                 .bind('1', "goto_form", "Go to Form demo")
                 .bind_key(KeyCode::Up, "move_up", "Move selection up")
                 .bind_key(KeyCode::Down, "move_down", "Move selection down")
-                .bind('j', "move_down", "Move selection down (vim)")
-                .bind('k', "move_up", "Move selection up (vim)")
+                .bind('p', "move_up", "Previous item (emacs)")
+                .bind('n', "move_down", "Next item (emacs)")
+                .bind('k', "move_up", "Move up (vim)")
+                .bind('j', "move_down", "Move down (vim)")
                 .bind('g', "goto_top", "Go to top")
                 .bind('G', "goto_bottom", "Go to bottom")
                 .bind('/', "search", "Search keybindings"),
@@ -278,7 +280,7 @@ impl Pane for KeymapPane {
         // Draw help at bottom
         let help_y = rect.y + rect.height - 2;
         g.set_style(Style::new().fg(Color::GRAY));
-        g.put_str(content_x, help_y, "Up/Down or j/k: navigate | 1: Form demo | q: quit");
+        g.put_str(content_x, help_y, "n/p or j/k: navigate | 1: Form demo | q: quit");
     }
 
     fn keymap(&self) -> &Keymap {
