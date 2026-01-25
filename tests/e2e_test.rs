@@ -20,10 +20,10 @@ fn test_displays_box_with_title() {
     // Wait a moment for rendering
     std::thread::sleep(Duration::from_millis(200));
 
-    // Verify the box and title are displayed
+    // Verify the box and title are displayed (main pane is Rack now)
     harness
-        .assert_screen_contains("Form Demo")
-        .expect("Should display 'Form Demo' title");
+        .assert_screen_contains("Rack")
+        .expect("Should display 'Rack' title");
 
     // Verify box borders are present (corner characters)
     let screen = harness.capture_screen().expect("Should capture screen");

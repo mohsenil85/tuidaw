@@ -22,6 +22,10 @@ pub enum Action {
     EditModule(crate::state::ModuleId),
     /// Update a module's params (sent by edit pane when done)
     UpdateModuleParams(crate::state::ModuleId, Vec<crate::state::Param>),
+    /// Save rack to file
+    SaveRack,
+    /// Load rack from file
+    LoadRack,
 }
 
 /// Trait for UI panes (screens/views)

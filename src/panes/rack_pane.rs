@@ -30,7 +30,9 @@ impl RackPane {
                 .bind('G', "goto_bottom", "Go to bottom")
                 .bind('a', "add", "Add module")
                 .bind('d', "delete", "Delete module")
-                .bind('e', "edit", "Edit module"),
+                .bind('e', "edit", "Edit module")
+                .bind('w', "save", "Save rack")
+                .bind('o', "load", "Load rack"),
             rack,
         }
     }
@@ -67,6 +69,20 @@ impl RackPane {
     pub fn update_module_params(&mut self, id: ModuleId, params: Vec<Param>) {
         if let Some(module) = self.rack.modules.get_mut(&id) {
             module.params = params;
+        }
+    }
+
+    /// Get reference to rack state for saving
+    pub fn rack(&self) -> &RackState {
+        &self.rack
+    }
+
+    /// Replace rack state (for loading)
+    pub fn set_rack(&mut self, rack: RackState) {
+        self.rack = rack;
+        // Select first module if any exist
+        if !self.rack.order.is_empty() {
+            self.rack.selected = Some(0);
         }
     }
 }
@@ -120,6 +136,8 @@ impl Pane for RackPane {
                     Action::None
                 }
             }
+            Some("save") => Action::SaveRack,
+            Some("load") => Action::LoadRack,
             _ => Action::None,
         }
     }

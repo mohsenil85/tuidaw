@@ -1,6 +1,8 @@
+use serde::{Deserialize, Serialize};
+
 pub type ModuleId = u32;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ModuleType {
     SawOsc,
     SinOsc,
@@ -39,13 +41,13 @@ impl ModuleType {
             ModuleType::SawOsc | ModuleType::SinOsc | ModuleType::SqrOsc | ModuleType::TriOsc => {
                 vec![
                     Param {
-                        name: "freq",
+                        name: "freq".to_string(),
                         value: ParamValue::Float(440.0),
                         min: 20.0,
                         max: 20000.0,
                     },
                     Param {
-                        name: "amp",
+                        name: "amp".to_string(),
                         value: ParamValue::Float(0.5),
                         min: 0.0,
                         max: 1.0,
@@ -54,13 +56,13 @@ impl ModuleType {
             }
             ModuleType::Lpf | ModuleType::Hpf | ModuleType::Bpf => vec![
                 Param {
-                    name: "cutoff",
+                    name: "cutoff".to_string(),
                     value: ParamValue::Float(1000.0),
                     min: 20.0,
                     max: 20000.0,
                 },
                 Param {
-                    name: "resonance",
+                    name: "resonance".to_string(),
                     value: ParamValue::Float(0.5),
                     min: 0.0,
                     max: 1.0,
@@ -68,25 +70,25 @@ impl ModuleType {
             ],
             ModuleType::AdsrEnv => vec![
                 Param {
-                    name: "attack",
+                    name: "attack".to_string(),
                     value: ParamValue::Float(0.01),
                     min: 0.0,
                     max: 5.0,
                 },
                 Param {
-                    name: "decay",
+                    name: "decay".to_string(),
                     value: ParamValue::Float(0.1),
                     min: 0.0,
                     max: 5.0,
                 },
                 Param {
-                    name: "sustain",
+                    name: "sustain".to_string(),
                     value: ParamValue::Float(0.7),
                     min: 0.0,
                     max: 1.0,
                 },
                 Param {
-                    name: "release",
+                    name: "release".to_string(),
                     value: ParamValue::Float(0.3),
                     min: 0.0,
                     max: 10.0,
@@ -94,13 +96,13 @@ impl ModuleType {
             ],
             ModuleType::Lfo => vec![
                 Param {
-                    name: "rate",
+                    name: "rate".to_string(),
                     value: ParamValue::Float(1.0),
                     min: 0.01,
                     max: 100.0,
                 },
                 Param {
-                    name: "depth",
+                    name: "depth".to_string(),
                     value: ParamValue::Float(0.5),
                     min: 0.0,
                     max: 1.0,
@@ -108,19 +110,19 @@ impl ModuleType {
             ],
             ModuleType::Delay => vec![
                 Param {
-                    name: "time",
+                    name: "time".to_string(),
                     value: ParamValue::Float(0.3),
                     min: 0.0,
                     max: 2.0,
                 },
                 Param {
-                    name: "feedback",
+                    name: "feedback".to_string(),
                     value: ParamValue::Float(0.5),
                     min: 0.0,
                     max: 1.0,
                 },
                 Param {
-                    name: "mix",
+                    name: "mix".to_string(),
                     value: ParamValue::Float(0.3),
                     min: 0.0,
                     max: 1.0,
@@ -128,26 +130,26 @@ impl ModuleType {
             ],
             ModuleType::Reverb => vec![
                 Param {
-                    name: "room",
+                    name: "room".to_string(),
                     value: ParamValue::Float(0.5),
                     min: 0.0,
                     max: 1.0,
                 },
                 Param {
-                    name: "damp",
+                    name: "damp".to_string(),
                     value: ParamValue::Float(0.5),
                     min: 0.0,
                     max: 1.0,
                 },
                 Param {
-                    name: "mix",
+                    name: "mix".to_string(),
                     value: ParamValue::Float(0.3),
                     min: 0.0,
                     max: 1.0,
                 },
             ],
             ModuleType::Output => vec![Param {
-                name: "gain",
+                name: "gain".to_string(),
                 value: ParamValue::Float(1.0),
                 min: 0.0,
                 max: 2.0,
@@ -190,22 +192,22 @@ impl ModuleType {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Param {
-    pub name: &'static str,
+    pub name: String,
     pub value: ParamValue,
     pub min: f32,
     pub max: f32,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum ParamValue {
     Float(f32),
     Int(i32),
     Bool(bool),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Module {
     pub id: ModuleId,
     pub module_type: ModuleType,

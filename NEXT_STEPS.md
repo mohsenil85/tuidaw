@@ -1,71 +1,22 @@
 # Next Steps
 
-Roadmap for tuidaw development after Phase 2 completion.
+Roadmap for tuidaw development.
 
 ## Current State
 
-Phase 2 complete:
+**Phase 4 complete:**
 - UI engine with ratatui backend
 - State types: `Module`, `ModuleType`, `Param`, `RackState`
 - Action/Effect enums for command pattern
 - Three panes: Rack, Add, Edit (all with viewport scrolling)
-
-## Phase 3: Pane Communication
-
-**Status:** Not started
-
-The panes exist but don't communicate. Wire them up so user actions flow through properly.
-
-### Task 3.1: Add Module Flow
-
-When user presses Enter in AddPane, the selected module type should be added to the rack.
-
-**Current behavior:**
-- AddPane shows module types
-- Enter just calls `Action::SwitchPane("rack")`
-- No module is actually added
-
-**Needed:**
-- AddPane needs to communicate selected `ModuleType` back
-- RackPane needs to receive it and call `rack.add_module(type)`
-
-**Options:**
-1. New action: `Action::AddModule(ModuleType)` - handle in main loop
-2. Shared state: `Arc<Mutex<RackState>>` accessible to both panes
-3. Message passing: Return value from pane switch
-
-**Recommendation:** Option 1 - Add `AddModule(ModuleType)` to ui::Action enum. Main loop handles it by finding RackPane and calling add_module.
-
-### Task 3.2: Edit Module Flow
-
-When user presses 'e' in RackPane, EditPane should open with that module's params.
-
-**Current behavior:**
-- 'e' returns `Action::None` (placeholder)
-- EditPane exists with hardcoded test params
-- No connection between selected module and EditPane
-
-**Needed:**
-- RackPane needs to pass selected module data to EditPane
-- EditPane changes need to flow back to RackState
-- On Escape, params should be saved (or discarded?)
-
-**Options:**
-1. Recreate EditPane each time with current module's params
-2. EditPane holds reference/id to module, fetches params on open
-3. Clone params into EditPane, sync back on close
-
-**Recommendation:** Option 3 - Clone params, sync on close. Simpler ownership.
-
-### Task 3.3: Delete Confirmation (Optional)
-
-Currently 'd' deletes immediately. Maybe add confirmation?
+- Pane communication fully wired
+- SQLite persistence with normalized schema
 
 ---
 
-## Phase 4: Module Connections
+## Phase 5: Module Connections (Next)
 
-**Status:** Future
+**Status:** Not started
 
 Modules need signal routing (osc → filter → output).
 
@@ -98,11 +49,12 @@ struct RackState {
 
 - How to visualize connections in TUI?
 - Dedicated "connect mode" with cursor?
-- ASCII art cables?
+- ASCII art cables between modules?
+- Tab through connection points?
 
 ---
 
-## Phase 5: Audio Backend
+## Phase 6: Audio Backend
 
 **Status:** Future
 
@@ -130,37 +82,6 @@ The `Effect` enum already has:
 
 ---
 
-## Phase 6: Persistence
-
-**Status:** Future
-
-Save and load rack configurations.
-
-### Format
-
-JSON or RON for human-readable configs:
-
-```json
-{
-  "modules": [
-    {"id": 1, "type": "SawOsc", "name": "saw-1", "params": {...}},
-    {"id": 2, "type": "Lpf", "name": "lpf-1", "params": {...}}
-  ],
-  "connections": [
-    {"from": 1, "to": 2}
-  ]
-}
-```
-
-### Features
-
-- `Ctrl+S` to save
-- Auto-save on quit?
-- Load from command line arg
-- Recent files?
-
----
-
 ## Phase 7: Undo/Redo
 
 **Status:** Future
@@ -184,9 +105,37 @@ enum Command {
 ```
 
 Each command knows how to undo itself.
+- `u` to undo
+- `Ctrl+R` to redo
+
+---
+
+## Completed Phases
+
+### Phase 1: UI Foundation
+- Ratatui backend with Graphics trait abstraction
+- Input handling with InputSource trait
+- Basic main loop
+
+### Phase 2: State & Views
+- Module, ModuleType, Param, RackState types
+- Action/Effect enums
+- RackPane, AddPane, EditPane
+
+### Phase 3: Pane Communication
+- AddModule action: AddPane → RackState
+- EditModule/UpdateModuleParams: EditPane ↔ RackState
+- Pane downcasting with as_any_mut()
+
+### Phase 4: Persistence
+- SQLite database with normalized schema
+- Tables: schema_version, session, modules, module_params
+- Save with `w` key, load with `o` key
+- Default path: `~/.config/tuidaw/rack.tuidaw`
+- Round-trip test verifies params survive save/load
 
 ---
 
 ## Immediate Priority
 
-**Phase 3.1: Add Module Flow** - Get AddPane actually adding modules to the rack.
+**Phase 5: Module Connections** - Allow signal routing between modules.

@@ -4,14 +4,29 @@ mod state;
 mod ui;
 
 use std::any::Any;
+use std::path::PathBuf;
 use std::time::Duration;
 
 use panes::{AddPane, EditPane, RackPane};
+use state::RackState;
 use ui::{
     widgets::{ListItem, SelectList, TextInput},
     Action, Color, Graphics, InputEvent, InputSource, KeyCode, Keymap, Pane, PaneManager,
     RatatuiBackend, Rect, Style,
 };
+
+/// Default path for rack save file
+fn default_rack_path() -> PathBuf {
+    // Use ~/.config/tuidaw/rack.tuidaw on Unix, current dir elsewhere
+    if let Some(home) = std::env::var_os("HOME") {
+        PathBuf::from(home)
+            .join(".config")
+            .join("tuidaw")
+            .join("rack.tuidaw")
+    } else {
+        PathBuf::from("rack.tuidaw")
+    }
+}
 
 // ============================================================================
 // Demo Pane - Form with widgets
@@ -350,6 +365,33 @@ fn run(backend: &mut RatatuiBackend) -> std::io::Result<()> {
                     // Dispatch to rack pane and switch back
                     panes.dispatch_to("rack", &action);
                     panes.switch_to("rack");
+                }
+                Action::SaveRack => {
+                    let path = default_rack_path();
+                    // Ensure parent directory exists
+                    if let Some(parent) = path.parent() {
+                        let _ = std::fs::create_dir_all(parent);
+                    }
+                    if let Some(rack_pane) = panes.get_pane_mut::<RackPane>("rack") {
+                        if let Err(e) = rack_pane.rack().save(&path) {
+                            eprintln!("Failed to save rack: {}", e);
+                        }
+                    }
+                }
+                Action::LoadRack => {
+                    let path = default_rack_path();
+                    if path.exists() {
+                        match RackState::load(&path) {
+                            Ok(rack) => {
+                                if let Some(rack_pane) = panes.get_pane_mut::<RackPane>("rack") {
+                                    rack_pane.set_rack(rack);
+                                }
+                            }
+                            Err(e) => {
+                                eprintln!("Failed to load rack: {}", e);
+                            }
+                        }
+                    }
                 }
                 _ => {}
             }
