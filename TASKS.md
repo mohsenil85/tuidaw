@@ -14,7 +14,7 @@ Task queue for parallel agent execution. See `docs/phase2-spec.md` for detailed 
 ## Phase 2: State & Views
 
 ### Task 1: State Types
-**Status:** `[ ]`
+**Status:** `[x]`
 **Branch:** `task-1`
 **Files:** `src/state/mod.rs`, `src/state/module.rs`, `src/state/rack.rs`
 **Dependencies:** None
@@ -48,7 +48,7 @@ Create the core state types for modules and rack.
 ---
 
 ### Task 2: Action & Effect Enums
-**Status:** `[ ]`
+**Status:** `[x]`
 **Branch:** `task-2`
 **Files:** `src/core/mod.rs`, `src/core/action.rs`, `src/core/effect.rs`
 **Dependencies:** None
@@ -78,7 +78,7 @@ Create the action and effect enums for the command pattern.
 ---
 
 ### Task 3: Rack View Pane
-**Status:** `[!]`
+**Status:** `[x]`
 **Branch:** `task-3`
 **Files:** `src/panes/mod.rs`, `src/panes/rack_pane.rs`, `src/main.rs` (minor)
 **Dependencies:** Task 1, Task 2
@@ -116,7 +116,7 @@ Create the main rack view pane showing module list.
 ---
 
 ### Task 4: Add View Pane
-**Status:** `[!]`
+**Status:** `[x]`
 **Branch:** `task-4`
 **Files:** `src/panes/add_pane.rs`, `src/panes/mod.rs` (add export)
 **Dependencies:** Task 1, Task 2, Task 3
@@ -155,7 +155,7 @@ Create modal pane for selecting module type to add.
 ---
 
 ### Task 5: Edit View Pane
-**Status:** `[!]`
+**Status:** `[~]`
 **Branch:** `task-5`
 **Files:** `src/panes/edit_pane.rs`, `src/panes/mod.rs` (add export)
 **Dependencies:** Task 1, Task 2, Task 3
