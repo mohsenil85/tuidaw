@@ -1,3 +1,4 @@
+mod state;
 mod ui;
 
 use std::time::Duration;
