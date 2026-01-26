@@ -38,8 +38,10 @@ pub enum Action {
     StartServer,
     /// Stop scsynth server process
     StopServer,
-    /// Compile synthdefs
+    /// Compile synthdefs (slow - runs sclang)
     CompileSynthDefs,
+    /// Load pre-compiled synthdefs (fast)
+    LoadSynthDefs,
     /// Real-time parameter update
     SetModuleParam(crate::state::ModuleId, String, f32),
 }

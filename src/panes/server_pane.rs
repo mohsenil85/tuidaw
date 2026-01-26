@@ -19,7 +19,8 @@ impl ServerPane {
                 .bind('k', "stop", "Kill scsynth")
                 .bind('c', "connect", "Connect to server")
                 .bind('d', "disconnect", "Disconnect")
-                .bind('b', "compile", "Build synthdefs"),
+                .bind('b', "compile", "Build synthdefs")
+                .bind('l', "load", "Load synthdefs"),
             status: ServerStatus::Stopped,
             message: String::new(),
             server_running: false,
@@ -55,13 +56,14 @@ impl Pane for ServerPane {
             Some("connect") => Action::ConnectServer,
             Some("disconnect") => Action::DisconnectServer,
             Some("compile") => Action::CompileSynthDefs,
+            Some("load") => Action::LoadSynthDefs,
             _ => Action::None,
         }
     }
 
     fn render(&self, g: &mut dyn Graphics) {
         let (width, height) = g.size();
-        let rect = Rect::centered(width, height, 60, 14);
+        let rect = Rect::centered(width, height, 60, 15);
 
         g.set_style(Style::new().fg(Color::BLACK));
         g.draw_box(rect, Some(" Audio Server (scsynth) "));
@@ -102,11 +104,12 @@ impl Pane for ServerPane {
         }
 
         // Help text at bottom
-        let help_y = rect.y + rect.height - 4;
+        let help_y = rect.y + rect.height - 5;
         g.set_style(Style::new().fg(Color::GRAY));
         g.put_str(x, help_y, "s: start server  k: kill server");
         g.put_str(x, help_y + 1, "c: connect       d: disconnect");
-        g.put_str(x, help_y + 2, "b: build synths  Esc: back");
+        g.put_str(x, help_y + 2, "b: build synths  l: load synths");
+        g.put_str(x, help_y + 3, "Esc: back");
     }
 
     fn keymap(&self) -> &Keymap {

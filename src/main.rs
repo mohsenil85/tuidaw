@@ -482,6 +482,16 @@ fn run(backend: &mut RatatuiBackend) -> std::io::Result<()> {
                         }
                     }
                 }
+                Action::LoadSynthDefs => {
+                    let synthdef_dir = std::path::Path::new("synthdefs");
+                    let result = audio_engine.load_synthdefs(synthdef_dir);
+                    if let Some(server) = panes.get_pane_mut::<ServerPane>("server") {
+                        match result {
+                            Ok(()) => server.set_status(audio_engine.status(), "Synthdefs loaded"),
+                            Err(e) => server.set_status(audio_engine.status(), &e),
+                        }
+                    }
+                }
                 Action::SetModuleParam(module_id, ref param, value) => {
                     if audio_engine.is_running() {
                         let _ = audio_engine.set_param(*module_id, param, *value);
