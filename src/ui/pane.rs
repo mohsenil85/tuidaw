@@ -30,6 +30,18 @@ pub enum Action {
     AddConnection(Connection),
     /// Remove a connection between two module ports
     RemoveConnection(Connection),
+    /// Connect to audio server
+    ConnectServer,
+    /// Disconnect from audio server
+    DisconnectServer,
+    /// Start scsynth server process
+    StartServer,
+    /// Stop scsynth server process
+    StopServer,
+    /// Compile synthdefs
+    CompileSynthDefs,
+    /// Real-time parameter update
+    SetModuleParam(crate::state::ModuleId, String, f32),
 }
 
 /// Trait for UI panes (screens/views)

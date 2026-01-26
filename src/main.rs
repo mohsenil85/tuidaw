@@ -1,3 +1,4 @@
+mod audio;
 mod core;
 mod panes;
 mod state;
@@ -7,7 +8,8 @@ use std::any::Any;
 use std::path::PathBuf;
 use std::time::Duration;
 
-use panes::{AddPane, EditPane, RackPane};
+use audio::AudioEngine;
+use panes::{AddPane, EditPane, RackPane, ServerPane};
 use state::RackState;
 use ui::{
     widgets::{ListItem, SelectList, TextInput},
@@ -334,7 +336,10 @@ fn run(backend: &mut RatatuiBackend) -> std::io::Result<()> {
     let mut panes = PaneManager::new(Box::new(RackPane::new()));
     panes.add_pane(Box::new(AddPane::new()));
     panes.add_pane(Box::new(EditPane::new()));
+    panes.add_pane(Box::new(ServerPane::new()));
     panes.add_pane(Box::new(KeymapPane::new()));
+
+    let mut audio_engine = AudioEngine::new();
 
     loop {
         // Poll for input
@@ -345,6 +350,20 @@ fn run(backend: &mut RatatuiBackend) -> std::io::Result<()> {
                 Action::AddModule(_) => {
                     // Dispatch to rack pane and switch back
                     panes.dispatch_to("rack", &action);
+
+                    // Create synth for new module
+                    if audio_engine.is_running() {
+                        if let Some(rack) = panes.get_pane_mut::<RackPane>("rack") {
+                            if let Some(module) = rack.rack().modules.values().last() {
+                                let _ = audio_engine.create_synth(
+                                    module.id,
+                                    module.module_type,
+                                    &module.params,
+                                );
+                            }
+                        }
+                    }
+
                     panes.switch_to("rack");
                 }
                 Action::EditModule(id) => {
@@ -397,7 +416,88 @@ fn run(backend: &mut RatatuiBackend) -> std::io::Result<()> {
                     // Dispatch to rack pane
                     panes.dispatch_to("rack", &action);
                 }
+                Action::ConnectServer => {
+                    let result = audio_engine.connect("127.0.0.1:57110");
+                    if let Some(server) = panes.get_pane_mut::<ServerPane>("server") {
+                        match result {
+                            Ok(()) => {
+                                // Load synthdefs
+                                let synthdef_dir = std::path::Path::new("synthdefs");
+                                if let Err(e) = audio_engine.load_synthdefs(synthdef_dir) {
+                                    server.set_status(
+                                        audio::ServerStatus::Connected,
+                                        &format!("Connected (synthdef warning: {})", e),
+                                    );
+                                } else {
+                                    server.set_status(audio::ServerStatus::Connected, "Connected");
+                                }
+                            }
+                            Err(e) => {
+                                server.set_status(audio::ServerStatus::Error, &e.to_string())
+                            }
+                        }
+                    }
+                }
+                Action::DisconnectServer => {
+                    audio_engine.disconnect();
+                    if let Some(server) = panes.get_pane_mut::<ServerPane>("server") {
+                        server.set_status(audio_engine.status(), "Disconnected");
+                        server.set_server_running(audio_engine.server_running());
+                    }
+                }
+                Action::StartServer => {
+                    let result = audio_engine.start_server();
+                    if let Some(server) = panes.get_pane_mut::<ServerPane>("server") {
+                        match result {
+                            Ok(()) => {
+                                server.set_status(audio::ServerStatus::Running, "Server started");
+                                server.set_server_running(true);
+                            }
+                            Err(e) => {
+                                server.set_status(audio::ServerStatus::Error, &e);
+                                server.set_server_running(false);
+                            }
+                        }
+                    }
+                }
+                Action::StopServer => {
+                    audio_engine.stop_server();
+                    if let Some(server) = panes.get_pane_mut::<ServerPane>("server") {
+                        server.set_status(audio::ServerStatus::Stopped, "Server stopped");
+                        server.set_server_running(false);
+                    }
+                }
+                Action::CompileSynthDefs => {
+                    let scd_path = std::path::Path::new("synthdefs/compile.scd");
+                    match audio_engine.compile_synthdefs_async(scd_path) {
+                        Ok(()) => {
+                            if let Some(server) = panes.get_pane_mut::<ServerPane>("server") {
+                                server.set_status(audio_engine.status(), "Compiling synthdefs...");
+                            }
+                        }
+                        Err(e) => {
+                            if let Some(server) = panes.get_pane_mut::<ServerPane>("server") {
+                                server.set_status(audio_engine.status(), &e);
+                            }
+                        }
+                    }
+                }
+                Action::SetModuleParam(module_id, ref param, value) => {
+                    if audio_engine.is_running() {
+                        let _ = audio_engine.set_param(*module_id, param, *value);
+                    }
+                }
                 _ => {}
+            }
+        }
+
+        // Poll for background compile completion
+        if let Some(result) = audio_engine.poll_compile_result() {
+            if let Some(server) = panes.get_pane_mut::<ServerPane>("server") {
+                match result {
+                    Ok(msg) => server.set_status(audio_engine.status(), &msg),
+                    Err(e) => server.set_status(audio_engine.status(), &e),
+                }
             }
         }
 

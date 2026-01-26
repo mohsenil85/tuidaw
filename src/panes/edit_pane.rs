@@ -149,6 +149,20 @@ impl EditPane {
             ParamValue::Bool(_) => String::new(),
         }
     }
+
+    fn emit_current_param(&self) -> Action {
+        if let Some(id) = self.module_id {
+            if let Some(param) = self.params.get(self.selected_param) {
+                let value = match &param.value {
+                    ParamValue::Float(v) => *v,
+                    ParamValue::Int(v) => *v as f32,
+                    ParamValue::Bool(v) => if *v { 1.0 } else { 0.0 },
+                };
+                return Action::SetModuleParam(id, param.name.clone(), value);
+            }
+        }
+        Action::None
+    }
 }
 
 impl Pane for EditPane {
@@ -184,11 +198,11 @@ impl Pane for EditPane {
             }
             Some("increase") => {
                 self.adjust_param(true);
-                Action::None
+                self.emit_current_param()
             }
             Some("decrease") => {
                 self.adjust_param(false);
-                Action::None
+                self.emit_current_param()
             }
             _ => Action::None,
         }

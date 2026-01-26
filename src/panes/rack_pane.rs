@@ -45,6 +45,7 @@ impl RackPane {
                 .bind('x', "disconnect", "Disconnect modules")
                 .bind('w', "save", "Save rack")
                 .bind('o', "load", "Load rack")
+                .bind('s', "server", "Audio server")
                 .bind_key(KeyCode::Tab, "next_port", "Next port")
                 .bind('h', "prev_port", "Previous port")
                 .bind('l', "next_port", "Next port")
@@ -187,6 +188,7 @@ impl RackPane {
             }
             Some("save") => Action::SaveRack,
             Some("load") => Action::LoadRack,
+            Some("server") => Action::SwitchPane("server"),
             _ => Action::None,
         }
     }
