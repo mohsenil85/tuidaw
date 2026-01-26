@@ -215,6 +215,19 @@ impl MixerState {
             MixerSelection::Master => MixerSelection::Channel(1),
         };
     }
+
+    /// Cycle output target for the selected channel (channels only)
+    pub fn cycle_output(&mut self) {
+        if let MixerSelection::Channel(id) = self.selection {
+            if let Some(ch) = self.channel_mut(id) {
+                ch.output_target = match ch.output_target {
+                    OutputTarget::Master => OutputTarget::Bus(1),
+                    OutputTarget::Bus(n) if n < MAX_BUSES as u8 => OutputTarget::Bus(n + 1),
+                    OutputTarget::Bus(_) => OutputTarget::Master,
+                };
+            }
+        }
+    }
 }
 
 impl Default for MixerState {

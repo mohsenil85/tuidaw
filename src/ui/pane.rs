@@ -56,6 +56,8 @@ pub enum Action {
     MixerToggleSolo,
     /// Mixer: cycle between channels/buses/master sections
     MixerCycleSection,
+    /// Mixer: cycle output target for selected channel
+    MixerCycleOutput,
 }
 
 /// Trait for UI panes (screens/views)

@@ -571,6 +571,11 @@ fn run(backend: &mut RatatuiBackend) -> std::io::Result<()> {
                         rack_pane.rack_mut().mixer.cycle_section();
                     }
                 }
+                Action::MixerCycleOutput => {
+                    if let Some(rack_pane) = panes.get_pane_mut::<RackPane>("rack") {
+                        rack_pane.rack_mut().mixer.cycle_output();
+                    }
+                }
                 _ => {}
             }
         }
