@@ -550,21 +550,18 @@ fn run(backend: &mut RatatuiBackend) -> std::io::Result<()> {
                     }
                 }
                 Action::MixerAdjustLevel(delta) => {
+                    // Collect audio updates, then apply (avoids borrow conflicts)
+                    let mut updates: Vec<(u32, f32, bool)> = Vec::new();
                     if let Some(rack_pane) = panes.get_pane_mut::<RackPane>("rack") {
                         let mixer = &mut rack_pane.rack_mut().mixer;
+                        let master_level = mixer.master_level;
+                        let master_mute = mixer.master_mute;
                         match mixer.selection {
                             MixerSelection::Channel(id) => {
                                 if let Some(ch) = mixer.channel_mut(id) {
                                     ch.level = (ch.level + delta).clamp(0.0, 1.0);
-                                    // Sync to audio engine
-                                    if audio_engine.is_running() {
-                                        if let Some(module_id) = ch.module_id {
-                                            let _ = audio_engine.set_output_mixer_params(
-                                                module_id,
-                                                ch.level,
-                                                ch.mute,
-                                            );
-                                        }
+                                    if let Some(mid) = ch.module_id {
+                                        updates.push((mid, ch.level * master_level, ch.mute || master_mute));
                                     }
                                 }
                             }
@@ -575,26 +572,32 @@ fn run(backend: &mut RatatuiBackend) -> std::io::Result<()> {
                             }
                             MixerSelection::Master => {
                                 mixer.master_level = (mixer.master_level + delta).clamp(0.0, 1.0);
+                                for ch in &mixer.channels {
+                                    if let Some(mid) = ch.module_id {
+                                        updates.push((mid, ch.level * mixer.master_level, ch.mute || mixer.master_mute));
+                                    }
+                                }
                             }
+                        }
+                    }
+                    if audio_engine.is_running() {
+                        for (module_id, level, mute) in updates {
+                            let _ = audio_engine.set_output_mixer_params(module_id, level, mute);
                         }
                     }
                 }
                 Action::MixerToggleMute => {
+                    let mut updates: Vec<(u32, f32, bool)> = Vec::new();
                     if let Some(rack_pane) = panes.get_pane_mut::<RackPane>("rack") {
                         let mixer = &mut rack_pane.rack_mut().mixer;
+                        let master_level = mixer.master_level;
+                        let master_mute = mixer.master_mute;
                         match mixer.selection {
                             MixerSelection::Channel(id) => {
                                 if let Some(ch) = mixer.channel_mut(id) {
                                     ch.mute = !ch.mute;
-                                    // Sync to audio engine
-                                    if audio_engine.is_running() {
-                                        if let Some(module_id) = ch.module_id {
-                                            let _ = audio_engine.set_output_mixer_params(
-                                                module_id,
-                                                ch.level,
-                                                ch.mute,
-                                            );
-                                        }
+                                    if let Some(mid) = ch.module_id {
+                                        updates.push((mid, ch.level * master_level, ch.mute || master_mute));
                                     }
                                 }
                             }
@@ -605,7 +608,17 @@ fn run(backend: &mut RatatuiBackend) -> std::io::Result<()> {
                             }
                             MixerSelection::Master => {
                                 mixer.master_mute = !mixer.master_mute;
+                                for ch in &mixer.channels {
+                                    if let Some(mid) = ch.module_id {
+                                        updates.push((mid, ch.level * mixer.master_level, ch.mute || mixer.master_mute));
+                                    }
+                                }
                             }
+                        }
+                    }
+                    if audio_engine.is_running() {
+                        for (module_id, level, mute) in updates {
+                            let _ = audio_engine.set_output_mixer_params(module_id, level, mute);
                         }
                     }
                 }
