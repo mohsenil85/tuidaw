@@ -1,6 +1,7 @@
 mod connection;
 mod mixer;
 mod module;
+pub mod music;
 mod rack;
 
 pub use connection::{Connection, ConnectionError, PortRef};

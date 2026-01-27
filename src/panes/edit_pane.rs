@@ -2,6 +2,7 @@ use std::any::Any;
 
 use crate::state::{ModuleId, Param, ParamValue};
 use crate::ui::{Action, Color, Graphics, InputEvent, KeyCode, Keymap, Pane, Rect, Style};
+use crate::ui::widgets::TextInput;
 
 pub struct EditPane {
     keymap: Keymap,
@@ -10,6 +11,8 @@ pub struct EditPane {
     module_type_name: String,
     params: Vec<Param>,
     selected_param: usize,
+    editing: bool,
+    edit_input: TextInput,
 }
 
 impl EditPane {
@@ -24,12 +27,15 @@ impl EditPane {
                 .bind_key(KeyCode::Left, "decrease", "Decrease value")
                 .bind_key(KeyCode::Right, "increase", "Increase value")
                 .bind_key(KeyCode::PageUp, "increase_big", "Increase value +10%")
-                .bind_key(KeyCode::PageDown, "decrease_big", "Decrease value -10%"),
+                .bind_key(KeyCode::PageDown, "decrease_big", "Decrease value -10%")
+                .bind_key(KeyCode::Enter, "enter_edit", "Type value directly"),
             module_id: None,
             module_name: String::new(),
             module_type_name: String::new(),
             params: Vec::new(),
             selected_param: 0,
+            editing: false,
+            edit_input: TextInput::new(""),
         }
     }
 
@@ -180,7 +186,58 @@ impl Pane for EditPane {
     }
 
     fn handle_input(&mut self, event: InputEvent) -> Action {
+        // Handle text editing mode
+        if self.editing {
+            match event.key {
+                KeyCode::Enter => {
+                    // Confirm: parse the value and apply
+                    let text = self.edit_input.value().to_string();
+                    if let Some(param) = self.params.get_mut(self.selected_param) {
+                        match &param.value {
+                            ParamValue::Float(_) => {
+                                if let Ok(v) = text.parse::<f32>() {
+                                    param.value = ParamValue::Float(v.clamp(param.min, param.max));
+                                }
+                            }
+                            ParamValue::Int(_) => {
+                                if let Ok(v) = text.parse::<i32>() {
+                                    param.value = ParamValue::Int(v.clamp(param.min as i32, param.max as i32));
+                                }
+                            }
+                            ParamValue::Bool(_) => {
+                                let v = matches!(text.as_str(), "true" | "1" | "on" | "yes");
+                                param.value = ParamValue::Bool(v);
+                            }
+                        }
+                    }
+                    self.editing = false;
+                    self.edit_input.set_focused(false);
+                    return self.emit_current_param();
+                }
+                KeyCode::Escape => {
+                    // Cancel editing
+                    self.editing = false;
+                    self.edit_input.set_focused(false);
+                    return Action::None;
+                }
+                _ => {
+                    self.edit_input.handle_input(&event);
+                    return Action::None;
+                }
+            }
+        }
+
         match self.keymap.lookup(&event) {
+            Some("enter_edit") => {
+                // Enter text editing mode
+                if !self.params.is_empty() {
+                    let current_value = self.format_value(&self.params[self.selected_param]);
+                    self.edit_input.set_value(&current_value);
+                    self.edit_input.set_focused(true);
+                    self.editing = true;
+                }
+                Action::None
+            }
             Some("done") => {
                 // Return updated params to be synced back to the rack
                 if let Some(id) = self.module_id {
@@ -300,15 +357,19 @@ impl Pane for EditPane {
             }
             g.put_str(content_x + 15, y, &slider);
 
-            // Value
-            let value_str = self.format_value(param);
-            let value_display = format!("{:10}", value_str);
-            if is_selected {
-                g.set_style(Style::new().fg(Color::WHITE).bg(Color::SELECTION_BG));
+            // Value (or text input if editing this param)
+            if is_selected && self.editing {
+                self.edit_input.render(g, content_x + 48, y, 20);
             } else {
-                g.set_style(Style::new().fg(Color::WHITE));
+                let value_str = self.format_value(param);
+                let value_display = format!("{:10}", value_str);
+                if is_selected {
+                    g.set_style(Style::new().fg(Color::WHITE).bg(Color::SELECTION_BG));
+                } else {
+                    g.set_style(Style::new().fg(Color::WHITE));
+                }
+                g.put_str(content_x + 48, y, &value_display);
             }
-            g.put_str(content_x + 48, y, &value_display);
 
             // Range
             if is_selected {
@@ -342,7 +403,12 @@ impl Pane for EditPane {
         // Help text at bottom
         let help_y = rect.y + rect.height - 2;
         g.set_style(Style::new().fg(Color::DARK_GRAY));
-        g.put_str(content_x, help_y, "Left/Right: adjust | Up/Down: select | PgUp/PgDn: +/-10% | Esc: done");
+        let help_text = if self.editing {
+            "Enter: confirm | Esc: cancel"
+        } else {
+            "Left/Right: adjust | Up/Down: select | Enter: type value | Esc: done"
+        };
+        g.put_str(content_x, help_y, help_text);
     }
 
     fn keymap(&self) -> &Keymap {

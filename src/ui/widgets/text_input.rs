@@ -40,6 +40,11 @@ impl TextInput {
         &self.value
     }
 
+    pub fn set_value(&mut self, value: &str) {
+        self.value = value.to_string();
+        self.cursor = self.value.len();
+    }
+
     pub fn set_focused(&mut self, focused: bool) {
         self.focused = focused;
     }
@@ -101,7 +106,7 @@ impl TextInput {
     /// Returns the height used (always 1 for single-line input)
     pub fn render(&self, g: &mut dyn Graphics, x: u16, y: u16, width: u16) -> u16 {
         // Draw label
-        g.set_style(Style::new().fg(Color::BLACK));
+        g.set_style(Style::new().fg(Color::WHITE));
         g.put_str(x, y, &self.label);
 
         let input_x = x + self.label.len() as u16 + 1;
@@ -126,14 +131,14 @@ impl TextInput {
             let placeholder: String = self.placeholder.chars().take(content_width).collect();
             g.put_str(content_x, y, &placeholder);
         } else {
-            g.set_style(Style::new().fg(Color::BLACK));
+            g.set_style(Style::new().fg(Color::WHITE));
             let display: String = self.value.chars().take(content_width).collect();
             g.put_str(content_x, y, &display);
 
             // Draw cursor if focused
             if self.focused {
                 let cursor_x = content_x + self.cursor.min(content_width) as u16;
-                g.set_style(Style::new().fg(Color::WHITE).bg(Color::BLACK));
+                g.set_style(Style::new().fg(Color::WHITE).bg(Color::SELECTION_BG));
                 let cursor_char = self.value.chars().nth(self.cursor).unwrap_or(' ');
                 g.put_char(cursor_x, y, cursor_char);
             }

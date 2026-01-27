@@ -1,7 +1,7 @@
 use std::any::Any;
 
 use crate::audio::ServerStatus;
-use crate::ui::{Action, Color, Graphics, InputEvent, KeyCode, Keymap, Pane, Rect, Style};
+use crate::ui::{Action, Color, Graphics, InputEvent, Keymap, Pane, Rect, Style};
 
 pub struct ServerPane {
     keymap: Keymap,
@@ -14,14 +14,12 @@ impl ServerPane {
     pub fn new() -> Self {
         Self {
             keymap: Keymap::new()
-                .bind_key(KeyCode::Escape, "back", "Return to rack")
                 .bind('s', "start", "Start scsynth")
                 .bind('k', "stop", "Kill scsynth")
                 .bind('c', "connect", "Connect to server")
                 .bind('d', "disconnect", "Disconnect")
                 .bind('b', "compile", "Build synthdefs")
-                .bind('l', "load", "Load synthdefs")
-                .bind('h', "home", "Home screen"),
+                .bind('l', "load", "Load synthdefs"),
             status: ServerStatus::Stopped,
             message: String::new(),
             server_running: false,
@@ -51,14 +49,12 @@ impl Pane for ServerPane {
 
     fn handle_input(&mut self, event: InputEvent) -> Action {
         match self.keymap.lookup(&event) {
-            Some("back") => Action::SwitchPane("rack"),
             Some("start") => Action::StartServer,
             Some("stop") => Action::StopServer,
             Some("connect") => Action::ConnectServer,
             Some("disconnect") => Action::DisconnectServer,
             Some("compile") => Action::CompileSynthDefs,
             Some("load") => Action::LoadSynthDefs,
-            Some("home") => Action::SwitchPane("home"),
             _ => Action::None,
         }
     }
@@ -118,7 +114,7 @@ impl Pane for ServerPane {
         g.put_str(x, help_y, "s: start server  k: kill server");
         g.put_str(x, help_y + 1, "c: connect       d: disconnect");
         g.put_str(x, help_y + 2, "b: build synths  l: load synths");
-        g.put_str(x, help_y + 3, "Esc: back");
+        g.put_str(x, help_y + 3, "F1: help  F2: rack  F5: mixer");
     }
 
     fn keymap(&self) -> &Keymap {

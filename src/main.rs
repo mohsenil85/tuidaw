@@ -9,11 +9,11 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use audio::AudioEngine;
-use panes::{AddPane, EditPane, HelpPane, HomePane, MixerPane, RackPane, ServerPane};
+use panes::{AddPane, EditPane, HelpPane, HomePane, MixerPane, PianoRollPane, RackPane, SequencerPane, ServerPane};
 use state::{MixerSelection, RackState};
 use ui::{
     widgets::{ListItem, SelectList, TextInput},
-    Action, Color, Graphics, InputEvent, InputSource, KeyCode, Keymap, Pane, PaneManager,
+    Action, Color, Frame, Graphics, InputEvent, InputSource, KeyCode, Keymap, Pane, PaneManager,
     RatatuiBackend, Rect, Style,
 };
 
@@ -128,7 +128,7 @@ impl Pane for DemoPane {
         let box_height = 29;
         let rect = Rect::centered(width, height, box_width, box_height);
 
-        g.set_style(Style::new().fg(Color::BLACK));
+        g.set_style(Style::new().fg(Color::WHITE));
         g.draw_box(rect, Some(" [1] Form Demo "));
 
         let content_x = rect.x + 2;
@@ -147,7 +147,7 @@ impl Pane for DemoPane {
 
         // Draw info panel on the right
         let info_x = content_x + content_width / 2 + 4;
-        g.set_style(Style::new().fg(Color::BLACK));
+        g.set_style(Style::new().fg(Color::WHITE));
         g.put_str(info_x, content_y, "Current Values:");
         g.put_str(info_x, content_y + 2, &format!("Name: {}", self.name_input.value()));
         g.put_str(info_x, content_y + 3, &format!("Email: {}", self.email_input.value()));
@@ -159,7 +159,7 @@ impl Pane for DemoPane {
         // Draw status/hint at bottom
         let help_y = rect.y + rect.height - 2;
         if self.focus_index.is_none() {
-            g.set_style(Style::new().fg(Color::WHITE).bg(Color::BLACK));
+            g.set_style(Style::new().fg(Color::WHITE).bg(Color::SELECTION_BG));
             g.put_str(content_x, help_y, " Press Tab to start ");
             g.set_style(Style::new().fg(Color::GRAY));
             g.put_str(content_x + 21, help_y, " | 2: Keymap demo | q: quit");
@@ -248,14 +248,14 @@ impl Pane for KeymapPane {
         let box_height = 29;
         let rect = Rect::centered(width, height, box_width, box_height);
 
-        g.set_style(Style::new().fg(Color::BLACK));
+        g.set_style(Style::new().fg(Color::WHITE));
         g.draw_box(rect, Some(" [2] Keymap Demo "));
 
         let content_x = rect.x + 2;
         let content_y = rect.y + 2;
 
         // Title
-        g.set_style(Style::new().fg(Color::BLACK));
+        g.set_style(Style::new().fg(Color::WHITE));
         g.put_str(content_x, content_y, "This pane's keybindings:");
         g.put_str(content_x, content_y + 1, "(navigate with arrows or j/k)");
 
@@ -272,10 +272,10 @@ impl Pane for KeymapPane {
             let is_selected = i == self.selected;
 
             if is_selected {
-                g.set_style(Style::new().fg(Color::WHITE).bg(Color::BLACK));
+                g.set_style(Style::new().fg(Color::WHITE).bg(Color::SELECTION_BG));
                 g.put_str(content_x, y, "> ");
             } else {
-                g.set_style(Style::new().fg(Color::BLACK));
+                g.set_style(Style::new().fg(Color::WHITE));
                 g.put_str(content_x, y, "  ");
             }
 
@@ -288,7 +288,7 @@ impl Pane for KeymapPane {
 
             // Description
             if is_selected {
-                g.set_style(Style::new().fg(Color::WHITE).bg(Color::BLACK));
+                g.set_style(Style::new().fg(Color::WHITE).bg(Color::SELECTION_BG));
             } else {
                 g.set_style(Style::new().fg(Color::GRAY));
             }
@@ -341,30 +341,97 @@ fn run(backend: &mut RatatuiBackend) -> std::io::Result<()> {
     panes.add_pane(Box::new(MixerPane::new()));
     panes.add_pane(Box::new(HelpPane::new()));
     panes.add_pane(Box::new(KeymapPane::new()));
+    panes.add_pane(Box::new(PianoRollPane::new()));
+    panes.add_pane(Box::new(SequencerPane::new()));
 
     let mut audio_engine = AudioEngine::new();
+    let mut app_frame = Frame::new();
+
+    // Auto-start SuperCollider server
+    {
+        app_frame.push_message("SC: starting server...".to_string());
+        match audio_engine.start_server() {
+            Ok(()) => {
+                app_frame.push_message("SC: server started on port 57110".to_string());
+                if let Some(server) = panes.get_pane_mut::<ServerPane>("server") {
+                    server.set_status(audio::ServerStatus::Running, "Server started");
+                    server.set_server_running(true);
+                }
+                // Auto-connect
+                match audio_engine.connect("127.0.0.1:57110") {
+                    Ok(()) => {
+                        app_frame.push_message("SC: connected".to_string());
+                        // Auto-load synthdefs
+                        let synthdef_dir = std::path::Path::new("synthdefs");
+                        if let Err(e) = audio_engine.load_synthdefs(synthdef_dir) {
+                            app_frame.push_message(format!("SC: synthdef warning: {}", e));
+                            if let Some(server) = panes.get_pane_mut::<ServerPane>("server") {
+                                server.set_status(
+                                    audio::ServerStatus::Connected,
+                                    &format!("Connected (synthdef warning: {})", e),
+                                );
+                            }
+                        } else {
+                            app_frame.push_message("SC: synthdefs loaded".to_string());
+                            if let Some(server) = panes.get_pane_mut::<ServerPane>("server") {
+                                server.set_status(audio::ServerStatus::Connected, "Connected + synthdefs loaded");
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        app_frame.push_message(format!("SC: connect failed: {}", e));
+                        if let Some(server) = panes.get_pane_mut::<ServerPane>("server") {
+                            server.set_status(audio::ServerStatus::Running, "Server running (connect failed)");
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                app_frame.push_message(format!("SC: start failed: {}", e));
+            }
+        }
+    }
 
     loop {
         // Poll for input
         if let Some(event) = backend.poll_event(Duration::from_millis(16)) {
-            // Global F1 handler for help
-            if event.key == KeyCode::F(1) && panes.active().id() != "help" {
-                let current_id = panes.active().id();
-                let current_keymap = panes.active().keymap().clone();
-                let title = match current_id {
-                    "rack" => "Rack",
-                    "mixer" => "Mixer",
-                    "server" => "Server",
-                    "home" => "Home",
-                    "add" => "Add Module",
-                    "edit" => "Edit Module",
-                    _ => current_id,
+            // Global F-key navigation
+            if let KeyCode::F(n) = event.key {
+                let target = match n {
+                    1 => {
+                        // F1 = Help (contextual)
+                        if panes.active().id() != "help" {
+                            let current_id = panes.active().id();
+                            let current_keymap = panes.active().keymap().clone();
+                            let title = match current_id {
+                                "rack" => "Rack",
+                                "mixer" => "Mixer",
+                                "server" => "Server",
+                                "piano_roll" => "Piano Roll",
+                                "sequencer" => "Sequencer",
+                                "add" => "Add Module",
+                                "edit" => "Edit Module",
+                                _ => current_id,
+                            };
+                            if let Some(help) = panes.get_pane_mut::<HelpPane>("help") {
+                                help.set_context(current_id, title, &current_keymap);
+                            }
+                            Some("help")
+                        } else {
+                            None
+                        }
+                    }
+                    2 => Some("rack"),
+                    3 => Some("piano_roll"),
+                    4 => Some("sequencer"),
+                    5 => Some("mixer"),
+                    6 => Some("server"),
+                    _ => None,
                 };
-                if let Some(help) = panes.get_pane_mut::<HelpPane>("help") {
-                    help.set_context(current_id, title, &current_keymap);
+                if let Some(id) = target {
+                    panes.switch_to(id);
+                    continue;
                 }
-                panes.switch_to("help");
-                continue;
             }
 
             let action = panes.handle_input(event);
@@ -672,6 +739,10 @@ fn run(backend: &mut RatatuiBackend) -> std::io::Result<()> {
         // Render
         let mut frame = backend.begin_frame()?;
 
+        // Render the outer frame (border, header bar, console)
+        app_frame.render(&mut frame);
+
+        // Render pane content within the inner rect
         // Special handling for mixer pane which needs rack state
         if panes.active().id() == "mixer" {
             // Get rack state for mixer rendering

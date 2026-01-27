@@ -60,9 +60,6 @@ impl RackPane {
                 .bind('x', "disconnect", "Disconnect modules")
                 .bind('w', "save", "Save rack")
                 .bind('o', "load", "Load rack")
-                .bind('s', "server", "Audio server")
-                .bind('m', "mixer", "Mixer view")
-                .bind('h', "home", "Home screen")
                 .bind_key(KeyCode::Left, "prev_port", "Previous port")
                 .bind_key(KeyCode::Right, "next_port", "Next port")
                 .bind_key(KeyCode::Tab, "next_port", "Next port")
@@ -210,9 +207,6 @@ impl RackPane {
             }
             Some("save") => Action::SaveRack,
             Some("load") => Action::LoadRack,
-            Some("server") => Action::SwitchPane("server"),
-            Some("mixer") => Action::SwitchPane("mixer"),
-            Some("home") => Action::SwitchPane("home"),
             _ => Action::None,
         }
     }

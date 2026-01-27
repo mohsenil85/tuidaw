@@ -1,0 +1,54 @@
+use std::any::Any;
+
+use crate::ui::{Action, Color, Graphics, InputEvent, Keymap, Pane, Rect, Style};
+
+pub struct PianoRollPane {
+    keymap: Keymap,
+}
+
+impl PianoRollPane {
+    pub fn new() -> Self {
+        Self {
+            keymap: Keymap::new()
+                .bind('q', "quit", "Quit"),
+        }
+    }
+}
+
+impl Default for PianoRollPane {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Pane for PianoRollPane {
+    fn id(&self) -> &'static str {
+        "piano_roll"
+    }
+
+    fn handle_input(&mut self, event: InputEvent) -> Action {
+        match self.keymap.lookup(&event) {
+            Some("quit") => Action::Quit,
+            _ => Action::None,
+        }
+    }
+
+    fn render(&self, g: &mut dyn Graphics) {
+        let (width, height) = g.size();
+        let rect = Rect::centered(width, height, 50, 10);
+
+        g.set_style(Style::new().fg(Color::PINK));
+        g.draw_box(rect, Some(" Piano Roll "));
+
+        g.set_style(Style::new().fg(Color::GRAY));
+        g.put_str(rect.x + 2, rect.y + 4, "Coming soon...");
+    }
+
+    fn keymap(&self) -> &Keymap {
+        &self.keymap
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+}

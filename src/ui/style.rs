@@ -21,7 +21,7 @@ impl Color {
     pub const CYAN: Color = Color::new(0, 255, 255);
     pub const MAGENTA: Color = Color::new(255, 0, 255);
     pub const GRAY: Color = Color::new(128, 128, 128);
-    pub const DARK_GRAY: Color = Color::new(64, 64, 64);
+    pub const DARK_GRAY: Color = Color::new(100, 100, 100);
 
     // DAW accent colors
     pub const ORANGE: Color = Color::new(255, 165, 0);

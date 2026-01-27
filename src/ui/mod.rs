@@ -1,3 +1,4 @@
+pub mod frame;
 pub mod graphics;
 pub mod input;
 pub mod keymap;
@@ -6,6 +7,7 @@ pub mod ratatui_impl;
 pub mod style;
 pub mod widgets;
 
+pub use frame::Frame;
 pub use graphics::{Graphics, Rect};
 pub use input::{InputEvent, InputSource, KeyCode, Modifiers};
 pub use keymap::{KeyBinding, KeyPattern, Keymap};

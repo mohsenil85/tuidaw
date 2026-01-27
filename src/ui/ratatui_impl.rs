@@ -45,11 +45,19 @@ impl RatatuiBackend {
         Ok(())
     }
 
-    /// Begin a new frame for drawing
+    /// Begin a new frame for drawing (black background)
     pub fn begin_frame(&self) -> io::Result<RatatuiFrame> {
         let size = self.terminal.size()?;
+        let mut buffer = Buffer::empty(size);
+        // Fill entire buffer with black background
+        let bg_style = RatatuiStyle::default().bg(RatatuiColor::Rgb(0, 0, 0));
+        for y in 0..size.height {
+            for x in 0..size.width {
+                buffer.get_mut(x, y).set_style(bg_style);
+            }
+        }
         Ok(RatatuiFrame {
-            buffer: Buffer::empty(size),
+            buffer,
             size: (size.width, size.height),
             current_style: Style::default(),
         })
