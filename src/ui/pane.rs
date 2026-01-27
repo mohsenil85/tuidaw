@@ -1,6 +1,7 @@
 use std::any::Any;
 
 use super::{Graphics, InputEvent, Keymap};
+use super::frame::SessionState;
 use crate::state::{Connection, ModuleType};
 
 /// Actions that can be returned from pane input handling
@@ -96,6 +97,8 @@ pub enum Action {
     PianoRollCycleTimeSig,
     /// Piano roll: toggle polyphonic/monophonic mode for current track
     PianoRollTogglePolyMode,
+    /// Update session state (from frame edit pane)
+    UpdateSession(SessionState),
 }
 
 /// Trait for UI panes (screens/views).

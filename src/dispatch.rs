@@ -69,8 +69,13 @@ pub fn dispatch_action(
             if let Some(parent) = path.parent() {
                 let _ = std::fs::create_dir_all(parent);
             }
+            // Sync session state to piano_roll before saving
+            app_frame.session.time_signature = panes
+                .get_pane_mut::<RackPane>("rack")
+                .map(|r| r.rack().piano_roll.time_signature)
+                .unwrap_or(app_frame.session.time_signature);
             if let Some(rack_pane) = panes.get_pane_mut::<RackPane>("rack") {
-                if let Err(e) = rack_pane.rack().save(&path) {
+                if let Err(e) = rack_pane.rack().save(&path, &app_frame.session) {
                     eprintln!("Failed to save rack: {}", e);
                 }
             }
@@ -84,10 +89,11 @@ pub fn dispatch_action(
             let path = default_rack_path();
             if path.exists() {
                 match RackState::load(&path) {
-                    Ok(rack) => {
+                    Ok((rack, loaded_session)) => {
                         if let Some(rack_pane) = panes.get_pane_mut::<RackPane>("rack") {
                             rack_pane.set_rack(rack);
                         }
+                        app_frame.session = loaded_session;
                         let name = path.file_stem()
                             .and_then(|s| s.to_str())
                             .unwrap_or("default")
@@ -456,6 +462,14 @@ pub fn dispatch_action(
             if let Some(pr_pane) = panes.get_pane_mut::<PianoRollPane>("piano_roll") {
                 pr_pane.jump_to_end();
             }
+        }
+        Action::UpdateSession(ref session) => {
+            app_frame.session = session.clone();
+            if let Some(rack_pane) = panes.get_pane_mut::<RackPane>("rack") {
+                rack_pane.rack_mut().piano_roll.time_signature = session.time_signature;
+                rack_pane.rack_mut().piano_roll.bpm = session.bpm as f32;
+            }
+            panes.switch_to("rack");
         }
         _ => {}
     }

@@ -6,8 +6,11 @@ use serde::{Deserialize, Serialize};
 
 use super::connection::{Connection, ConnectionError, PortRef};
 use super::mixer::MixerState;
+use super::music::{Key, Scale};
 use super::piano_roll::PianoRollState;
 use super::{Module, ModuleId, ModuleType, Param, PortDirection};
+
+use crate::ui::frame::SessionState;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RackState {
@@ -235,7 +238,7 @@ impl RackState {
     }
 
     /// Save rack state to SQLite database (.tuidaw file)
-    pub fn save(&self, path: &Path) -> SqlResult<()> {
+    pub fn save(&self, path: &Path, session: &SessionState) -> SqlResult<()> {
         let conn = SqlConnection::open(path)?;
 
         // Create schema (following docs/sqlite-persistence.md)
@@ -335,7 +338,11 @@ impl RackState {
                 ticks_per_beat INTEGER NOT NULL,
                 loop_start INTEGER NOT NULL,
                 loop_end INTEGER NOT NULL,
-                looping INTEGER NOT NULL
+                looping INTEGER NOT NULL,
+                key TEXT NOT NULL DEFAULT 'C',
+                scale TEXT NOT NULL DEFAULT 'Major',
+                tuning_a4 REAL NOT NULL DEFAULT 440.0,
+                snap INTEGER NOT NULL DEFAULT 0
             );
 
             -- Clear existing data for full save
@@ -517,18 +524,22 @@ impl RackState {
             }
         }
 
-        // Insert musical settings
+        // Insert musical settings (includes session state)
         conn.execute(
-            "INSERT INTO musical_settings (id, bpm, time_sig_num, time_sig_denom, ticks_per_beat, loop_start, loop_end, looping)
-             VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            "INSERT INTO musical_settings (id, bpm, time_sig_num, time_sig_denom, ticks_per_beat, loop_start, loop_end, looping, key, scale, tuning_a4, snap)
+             VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
             rusqlite::params![
-                self.piano_roll.bpm as f64,
-                self.piano_roll.time_signature.0,
-                self.piano_roll.time_signature.1,
+                session.bpm as f64,
+                session.time_signature.0,
+                session.time_signature.1,
                 self.piano_roll.ticks_per_beat,
                 self.piano_roll.loop_start,
                 self.piano_roll.loop_end,
                 self.piano_roll.looping,
+                session.key.name(),
+                session.scale.name(),
+                session.tuning_a4 as f64,
+                session.snap,
             ],
         )?;
 
@@ -536,7 +547,7 @@ impl RackState {
     }
 
     /// Load rack state from SQLite database (.tuidaw file)
-    pub fn load(path: &Path) -> SqlResult<Self> {
+    pub fn load(path: &Path) -> SqlResult<(Self, SessionState)> {
         let conn = SqlConnection::open(path)?;
 
         // Load session metadata
@@ -737,9 +748,10 @@ impl RackState {
         // Load piano roll state (graceful fallback for old files)
         let mut piano_roll = PianoRollState::new();
 
-        // Load musical settings
+        // Load musical settings (includes session state)
+        let mut session = SessionState::default();
         if let Ok(row) = conn.query_row(
-            "SELECT bpm, time_sig_num, time_sig_denom, ticks_per_beat, loop_start, loop_end, looping
+            "SELECT bpm, time_sig_num, time_sig_denom, ticks_per_beat, loop_start, loop_end, looping, key, scale, tuning_a4, snap
              FROM musical_settings WHERE id = 1",
             [],
             |row| {
@@ -750,9 +762,19 @@ impl RackState {
                 let ls: u32 = row.get(4)?;
                 let le: u32 = row.get(5)?;
                 let looping: bool = row.get(6)?;
-                Ok((bpm, tsn, tsd, tpb, ls, le, looping))
+                let key_str: String = row.get(7)?;
+                let scale_str: String = row.get(8)?;
+                let tuning: f64 = row.get(9)?;
+                let snap: bool = row.get(10)?;
+                Ok((bpm, tsn, tsd, tpb, ls, le, looping, key_str, scale_str, tuning, snap))
             },
         ) {
+            session.bpm = row.0 as u16;
+            session.time_signature = (row.1, row.2);
+            session.key = parse_key(&row.7);
+            session.scale = parse_scale(&row.8);
+            session.tuning_a4 = row.9 as f32;
+            session.snap = row.10;
             piano_roll.bpm = row.0 as f32;
             piano_roll.time_signature = (row.1, row.2);
             piano_roll.ticks_per_beat = row.3;
@@ -813,7 +835,7 @@ impl RackState {
             }
         }
 
-        Ok(Self {
+        Ok((Self {
             modules,
             order,
             connections,
@@ -821,7 +843,7 @@ impl RackState {
             mixer,
             piano_roll,
             next_id,
-        })
+        }, session))
     }
 }
 
@@ -832,6 +854,14 @@ impl Default for RackState {
 }
 
 /// Parse module type from string (used for SQLite loading)
+fn parse_key(s: &str) -> Key {
+    Key::ALL.iter().find(|k| k.name() == s).copied().unwrap_or(Key::C)
+}
+
+fn parse_scale(s: &str) -> Scale {
+    Scale::ALL.iter().find(|sc| sc.name() == s).copied().unwrap_or(Scale::Major)
+}
+
 fn parse_module_type(s: &str) -> ModuleType {
     match s {
         "Midi" => ModuleType::Midi,
@@ -1084,10 +1114,11 @@ mod tests {
         // Save to temp file
         let dir = tempdir().expect("Failed to create temp dir");
         let path = dir.path().join("test.tuidaw");
-        rack.save(&path).expect("Failed to save");
+        let session = SessionState::default();
+        rack.save(&path, &session).expect("Failed to save");
 
         // Load and verify
-        let loaded = RackState::load(&path).expect("Failed to load");
+        let (loaded, _loaded_session) = RackState::load(&path).expect("Failed to load");
 
         // Verify modules
         assert_eq!(loaded.modules.len(), 3);
@@ -1327,10 +1358,11 @@ mod tests {
         // Save to temp file
         let dir = tempdir().expect("Failed to create temp dir");
         let path = dir.path().join("test_connections.tuidaw");
-        rack.save(&path).expect("Failed to save");
+        let session = SessionState::default();
+        rack.save(&path, &session).expect("Failed to save");
 
         // Load and verify
-        let loaded = RackState::load(&path).expect("Failed to load");
+        let (loaded, _) = RackState::load(&path).expect("Failed to load");
 
         assert_eq!(loaded.connections.len(), 2);
         assert!(loaded.connections.contains(&conn1));

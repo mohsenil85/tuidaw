@@ -12,7 +12,7 @@ mod ui;
 use std::time::{Duration, Instant};
 
 use audio::AudioEngine;
-use panes::{AddPane, EditPane, HelpPane, HomePane, MixerPane, PianoRollPane, RackPane, SequencerPane, ServerPane};
+use panes::{AddPane, EditPane, FrameEditPane, HelpPane, HomePane, MixerPane, PianoRollPane, RackPane, SequencerPane, ServerPane};
 use ui::{
     Action, Frame, InputSource, KeyCode, PaneManager, RatatuiBackend,
 };
@@ -37,6 +37,7 @@ fn run(backend: &mut RatatuiBackend) -> std::io::Result<()> {
     panes.add_pane(Box::new(HelpPane::new()));
     panes.add_pane(Box::new(PianoRollPane::new()));
     panes.add_pane(Box::new(SequencerPane::new()));
+    panes.add_pane(Box::new(FrameEditPane::new()));
 
     let mut audio_engine = AudioEngine::new();
     let mut app_frame = Frame::new();
@@ -60,6 +61,19 @@ fn run(backend: &mut RatatuiBackend) -> std::io::Result<()> {
                     '3' => Some("sequencer"),
                     '4' => Some("mixer"),
                     '5' => Some("server"),
+                    '`' => {
+                        // Sync piano roll state into session before editing
+                        if let Some(rack_pane) = panes.get_pane_mut::<RackPane>("rack") {
+                            let pr = &rack_pane.rack().piano_roll;
+                            app_frame.session.time_signature = pr.time_signature;
+                            app_frame.session.bpm = pr.bpm as u16;
+                        }
+                        let session = app_frame.session.clone();
+                        if let Some(fe) = panes.get_pane_mut::<FrameEditPane>("frame_edit") {
+                            fe.set_session(session);
+                        }
+                        Some("frame_edit")
+                    }
                     '?' => {
                         if panes.active().id() != "help" {
                             let current_id = panes.active().id();

@@ -45,6 +45,12 @@ pub enum Scale {
 }
 
 impl Scale {
+    pub const ALL: [Scale; 11] = [
+        Scale::Major, Scale::Minor, Scale::Dorian, Scale::Phrygian,
+        Scale::Lydian, Scale::Mixolydian, Scale::Aeolian, Scale::Locrian,
+        Scale::Pentatonic, Scale::Blues, Scale::Chromatic,
+    ];
+
     pub fn name(&self) -> &'static str {
         match self {
             Scale::Major => "Major",

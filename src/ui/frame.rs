@@ -7,12 +7,14 @@ const CONSOLE_LINES: u16 = 4;
 const CONSOLE_CAPACITY: usize = 100;
 
 /// Musical session state displayed in the frame header
+#[derive(Debug, Clone, PartialEq)]
 pub struct SessionState {
     pub key: Key,
     pub scale: Scale,
     pub bpm: u16,
     pub tuning_a4: f32,
     pub snap: bool,
+    pub time_signature: (u8, u8),
 }
 
 impl Default for SessionState {
@@ -23,6 +25,7 @@ impl Default for SessionState {
             bpm: 120,
             tuning_a4: 440.0,
             snap: false,
+            time_signature: (4, 4),
         }
     }
 }
@@ -81,8 +84,9 @@ impl Frame {
         let snap_text = if self.session.snap { "ON" } else { "OFF" };
         let tuning_str = format!("A{:.0}", self.session.tuning_a4);
         let header = format!(
-            " TUIDAW - {}     Key: {}  Scale: {}  BPM: {}  Tuning: {}  [Snap: {}] ",
+            " TUIDAW - {}     Key: {}  Scale: {}  BPM: {}  {}/{}  Tuning: {}  [Snap: {}] ",
             self.project_name, self.session.key.name(), self.session.scale.name(), self.session.bpm,
+            self.session.time_signature.0, self.session.time_signature.1,
             tuning_str, snap_text,
         );
         g.set_style(Style::new().fg(Color::CYAN).bold());

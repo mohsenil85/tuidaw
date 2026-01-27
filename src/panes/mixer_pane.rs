@@ -33,15 +33,9 @@ impl MixerPane {
                 .bind('o', "output", "Cycle output target")
                 .bind('O', "output_rev", "Cycle output target backwards")
                 .bind_key(KeyCode::Tab, "section", "Cycle section")
-                .bind_key(KeyCode::F(1), "send1", "Select send 1")
-                .bind_key(KeyCode::F(2), "send2", "Select send 2")
-                .bind_key(KeyCode::F(3), "send3", "Select send 3")
-                .bind_key(KeyCode::F(4), "send4", "Select send 4")
-                .bind_key(KeyCode::F(5), "send5", "Select send 5")
-                .bind_key(KeyCode::F(6), "send6", "Select send 6")
-                .bind_key(KeyCode::F(7), "send7", "Select send 7")
-                .bind_key(KeyCode::F(8), "send8", "Select send 8")
-                .bind('t', "send_toggle", "Toggle selected send")
+                .bind('t', "send_next", "Next send target")
+                .bind('T', "send_prev", "Previous send target")
+                .bind('g', "send_toggle", "Toggle selected send")
                 .bind_key(KeyCode::Escape, "clear_send", "Clear send selection"),
             send_target: None,
         }
@@ -174,10 +168,20 @@ impl Pane for MixerPane {
             Some("output") => Action::MixerCycleOutput,
             Some("output_rev") => Action::MixerCycleOutputReverse,
             Some("section") => { self.send_target = None; Action::MixerCycleSection }
-            Some(s) if s.starts_with("send") && s.len() == 5 => {
-                if let Some(n) = s[4..].parse::<u8>().ok() {
-                    self.send_target = Some(n);
-                }
+            Some("send_next") => {
+                self.send_target = match self.send_target {
+                    None => Some(1),
+                    Some(8) => None,
+                    Some(n) => Some(n + 1),
+                };
+                Action::None
+            }
+            Some("send_prev") => {
+                self.send_target = match self.send_target {
+                    None => Some(8),
+                    Some(1) => None,
+                    Some(n) => Some(n - 1),
+                };
                 Action::None
             }
             Some("send_toggle") => {
@@ -348,7 +352,7 @@ impl MixerPane {
         g.put_str(
             base_x,
             help_y,
-            "[←/→] Select  [↑/↓] Level  [M]ute [S]olo [o]ut  [1-8] Send  [F2] Rack",
+            "[←/→] Select  [↑/↓] Level  [M]ute [S]olo [o]ut  [t/T] Send  [g] Toggle",
         );
     }
 
