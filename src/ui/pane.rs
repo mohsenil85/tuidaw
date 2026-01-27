@@ -96,7 +96,21 @@ pub enum Action {
     PianoRollCycleTimeSig,
 }
 
-/// Trait for UI panes (screens/views)
+/// Trait for UI panes (screens/views).
+///
+/// ## External State
+///
+/// Some panes need data from `RackState` (which is owned by `RackPane`).
+/// Because `PaneManager` only allows one `&mut` borrow at a time, these
+/// panes implement a separate `render_with_state()` method and get
+/// special-cased in the render block in main.rs.
+///
+/// If your pane needs rack/mixer/piano_roll state:
+/// 1. Add a `pub fn render_with_state(&self, g, state)` method
+/// 2. Make `render()` a no-op fallback
+/// 3. Add a branch in main.rs's render section (search for "active_id")
+///
+/// Current panes using this pattern: MixerPane, PianoRollPane
 pub trait Pane {
     /// Unique identifier for this pane
     fn id(&self) -> &'static str;

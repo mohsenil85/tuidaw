@@ -57,7 +57,21 @@ pub struct KeyBinding {
     pub description: &'static str,
 }
 
-/// A collection of key bindings for a pane
+/// A collection of key bindings for a pane.
+///
+/// Available bind methods (builder pattern):
+/// - `bind(char, action, desc)` — character key (no modifiers)
+/// - `bind_key(KeyCode, action, desc)` — special key (arrows, F-keys, etc.)
+/// - `bind_ctrl(char, action, desc)` — Ctrl + character
+/// - `bind_alt(char, action, desc)` — Alt + character
+/// - `bind_ctrl_key(KeyCode, action, desc)` — Ctrl + special key
+///
+/// Other methods:
+/// - `lookup(&InputEvent) -> Option<&str>` — match an event to its action
+/// - `bindings() -> &[KeyBinding]` — list all bindings (for help screens)
+///
+/// No `bind_shift_key` variant exists. For shift detection, check
+/// `event.modifiers.shift` manually before keymap lookup.
 #[derive(Debug, Clone, Default)]
 pub struct Keymap {
     bindings: Vec<KeyBinding>,

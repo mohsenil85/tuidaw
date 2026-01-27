@@ -1,4 +1,7 @@
-/// RGB Color representation
+/// RGB color. Construct with `Color::new(r, g, b)` or use named constants
+/// (e.g. `Color::WHITE`, `Color::PINK`, `Color::MIDI_COLOR`, `Color::METER_LOW`).
+///
+/// No `Color::rgb()` alias exists — use `Color::new()`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Color {
     pub r: u8,
@@ -58,7 +61,15 @@ impl Color {
     pub const SOLO_COLOR: Color = Color::new(255, 220, 80);    // Solo state
 }
 
-/// Text style with foreground, background, and attributes
+/// Text style with foreground, background, and attributes.
+///
+/// Builder methods (all const, chainable):
+/// - `fg(Color)` — set foreground color
+/// - `bg(Color)` — set background color
+/// - `bold()` — enable bold
+/// - `underline()` — enable underline
+///
+/// No `italic()`, `dim()`, or `reset()` methods exist.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Style {
     pub fg: Option<Color>,

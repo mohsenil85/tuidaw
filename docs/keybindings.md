@@ -1,6 +1,9 @@
 # Keybindings Philosophy
 
-tuidaw uses an emacs-inspired keybinding scheme, but without requiring Ctrl modifiers for common operations. This makes the app usable in terminals where Ctrl keys may be intercepted or awkward.
+tuidaw tries to use a "normie" keybinding scheme. The inspiration is
+Dwarf Fortress or those 80's tui's that you used to see at the airport
+where an experienced operator can fly through the menus at the speed
+of thought. Numbers keys are used for navigation, ? to view help.
 
 ## Design Principles
 
@@ -8,34 +11,23 @@ tuidaw uses an emacs-inspired keybinding scheme, but without requiring Ctrl modi
 2. **Mnemonic** - Keys should relate to their action (n=next, p=prev, etc.)
 3. **Context-sensitive** - Same key can do different things in different panes
 4. **Introspectable** - Every pane's keymap can be queried for help
-5. **Vim-compatible alternatives** - j/k work alongside n/p where sensible
+
 
 ## Global Keys
 
 These work across all panes (when not captured by a widget):
+(C-q means Control-q)
 
 | Key | Action | Mnemonic |
 |-----|--------|----------|
-| `q` | Quit | quit |
+| `C-q` | Quit | quit |
 | `?` | Help | question |
 | `1-9` | Switch to pane N | number |
 
 ## Navigation Keys
 
 Standard navigation (when a list/menu is focused):
-
-| Key | Action | Mnemonic |
-|-----|--------|----------|
-| `n` | Next item | next |
-| `p` | Previous item | previous |
-| `j` | Next item (vim) | down |
-| `k` | Previous item (vim) | up |
-| `g` | Go to top | go |
-| `G` | Go to bottom | Go (shifted) |
-| `f` | Forward page | forward |
-| `b` | Backward page | backward |
-
-Arrow keys also work for navigation.
+Arrow keys work for navigation.
 
 ## Selection & Action Keys
 
@@ -75,14 +67,15 @@ Each pane can define additional keys. Use `?` to see the current pane's keymap.
 |-----|--------|
 | `a` | Add module |
 | `d` | Delete module |
-| `m` | Open mixer |
 | `.` | Panic (silence all) |
 
 ### Mixer Pane (planned)
 | Key | Action |
 |-----|--------|
-| `m` | Mute channel |
-| `s` | Solo channel |
+| `m` | toggle Mute channel |
+| `M` | unmute all channels |
+| `s` | toggle Solo channel |
+| `S` | unsolo all channel |
 | `</>` | Pan left/right |
 | `+/-` | Volume up/down |
 
@@ -96,18 +89,9 @@ Each pane can define additional keys. Use `?` to see the current pane's keymap.
 
 ## Rationale
 
-### Why not Ctrl keys?
-
-1. **Terminal compatibility** - Some terminals intercept Ctrl+S, Ctrl+Q, etc.
-2. **tmux/screen conflicts** - Ctrl+A, Ctrl+B are common prefixes
 3. **Accessibility** - Single keys are easier to press
 4. **Testability** - Easier to send keys via tmux for E2E testing
 
-### Why emacs-style?
-
-1. **Consistency** - n/p is a well-known pattern
-2. **Text editing** - Cursor movement follows readline conventions
-3. **Discoverability** - Mnemonics help users remember
 
 ### When to use modifiers?
 

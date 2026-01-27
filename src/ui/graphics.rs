@@ -1,6 +1,15 @@
 use super::Style;
 
-/// Rectangle representing a region on screen
+/// Rectangle representing a region on screen.
+///
+/// Constructors:
+/// - `Rect::new(x, y, width, height)` — absolute position
+/// - `Rect::centered(area_width, area_height, width, height)` — centered within an area
+///
+/// Accessors: `right()`, `bottom()`
+///
+/// No `from_size`, `zero`, or `contains` methods exist.
+/// All main panes use `Rect::centered(w, h, 97, 29)` for consistent sizing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Rect {
     pub x: u16,
@@ -30,7 +39,17 @@ impl Rect {
     }
 }
 
-/// Graphics abstraction for drawing to the screen
+/// Graphics abstraction for drawing to the screen.
+///
+/// Available methods:
+/// - `put_char(x, y, char)` — single character
+/// - `put_str(x, y, &str)` — string at position
+/// - `set_style(Style)` — set style for subsequent draws
+/// - `draw_box(Rect, Option<&str>)` — bordered box with optional title
+/// - `fill_rect(Rect, char)` — fill area with a character
+/// - `size() -> (u16, u16)` — terminal dimensions (width, height)
+///
+/// No `clear_rect` or `clear` methods exist. Use `fill_rect(rect, ' ')` to clear.
 pub trait Graphics {
     /// Put a single character at the given position
     fn put_char(&mut self, x: u16, y: u16, ch: char);
