@@ -167,7 +167,8 @@ impl MixerState {
     pub fn unassign_module(&mut self, module_id: ModuleId) {
         for ch in &mut self.channels {
             if ch.module_id == Some(module_id) {
-                ch.module_id = None;
+                let id = ch.id;
+                *ch = MixerChannel::new(id);
                 break;
             }
         }

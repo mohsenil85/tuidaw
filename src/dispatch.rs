@@ -41,7 +41,7 @@ pub fn dispatch_action(
                 let _ = audio_engine.free_synth(*module_id);
             }
             if let Some(rack_pane) = panes.get_pane_mut::<RackPane>("rack") {
-                rack_pane.rack_mut().remove_module(*module_id);
+                rack_pane.remove_module(*module_id);
             }
             if audio_engine.is_running() {
                 if let Some(rack_pane) = panes.get_pane_mut::<RackPane>("rack") {

@@ -1,6 +1,7 @@
 use std::any::Any;
+use std::collections::HashSet;
 
-use crate::state::{Connection, Module, ModuleId, ModuleType, Param, ParamValue, PortRef, PortType, RackState};
+use crate::state::{Connection, Module, ModuleId, ModuleType, Param, ParamValue, PortDirection, PortRef, PortType, RackState};
 use crate::ui::{Action, Color, Graphics, InputEvent, KeyCode, Keymap, Pane, Rect, Style};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -34,19 +35,52 @@ fn port_type_color(port_type: PortType) -> Color {
     }
 }
 
+#[derive(Debug, Clone)]
+struct TreeRow {
+    module_id: ModuleId,
+    depth: u16,
+    is_last: bool,
+    prefix: Vec<bool>, // ancestor is_last flags for vertical line drawing
+    gap_before: bool,  // blank line before this row
+}
+
+impl TreeRow {
+    fn prefix_str(&self) -> String {
+        if self.depth == 0 {
+            return String::new();
+        }
+        let mut s = String::new();
+        for i in 0..(self.depth as usize - 1) {
+            if self.prefix[i] {
+                s.push_str("    ");
+            } else {
+                s.push_str("│   ");
+            }
+        }
+        if self.is_last {
+            s.push_str("└── ");
+        } else {
+            s.push_str("├── ");
+        }
+        s
+    }
+}
+
 pub struct RackPane {
     keymap: Keymap,
     rack: RackState,
     mode: RackMode,
     selected_port: usize,
     pending_src: Option<PortRef>,
+    tree_rows: Vec<TreeRow>,
+    tree_selected: usize,
 }
 
 impl RackPane {
     pub fn new() -> Self {
         let rack = RackState::new();
 
-        Self {
+        let mut pane = Self {
             keymap: Keymap::new()
                 .bind('q', "quit", "Quit the application")
                 .bind_key(KeyCode::Down, "next", "Next module")
@@ -68,13 +102,137 @@ impl RackPane {
             mode: RackMode::Normal,
             selected_port: 0,
             pending_src: None,
+            tree_rows: Vec::new(),
+            tree_selected: 0,
+        };
+        pane.rebuild_tree();
+        pane
+    }
+
+    // --- Tree building ---
+
+    fn rebuild_tree(&mut self) {
+        self.tree_rows = self.compute_tree();
+        if self.tree_rows.is_empty() {
+            self.tree_selected = 0;
+            self.rack.selected = None;
+        } else {
+            if self.tree_selected >= self.tree_rows.len() {
+                self.tree_selected = self.tree_rows.len() - 1;
+            }
+            self.sync_rack_selected();
         }
     }
+
+    fn sync_rack_selected(&mut self) {
+        if let Some(row) = self.tree_rows.get(self.tree_selected) {
+            let module_id = row.module_id;
+            if let Some(pos) = self.rack.order.iter().position(|&id| id == module_id) {
+                self.rack.selected = Some(pos);
+            }
+        }
+    }
+
+    fn compute_tree(&self) -> Vec<TreeRow> {
+        let mut rows = Vec::new();
+        let mut visited = HashSet::new();
+
+        // Find Output modules as roots (preserve rack order)
+        let roots: Vec<ModuleId> = self.rack.order.iter()
+            .filter(|&&id| self.rack.modules.get(&id)
+                .map(|m| m.module_type == ModuleType::Output)
+                .unwrap_or(false))
+            .copied()
+            .collect();
+
+        for (i, &root_id) in roots.iter().enumerate() {
+            self.tree_dfs(root_id, 0, true, &mut vec![], &mut visited, &mut rows, i > 0);
+        }
+
+        // Unconnected modules at bottom
+        let mut first_unconnected = true;
+        for &id in &self.rack.order {
+            if !visited.contains(&id) {
+                let gap = !rows.is_empty() && first_unconnected;
+                first_unconnected = false;
+                visited.insert(id);
+                rows.push(TreeRow {
+                    module_id: id,
+                    depth: 0,
+                    is_last: true,
+                    prefix: vec![],
+                    gap_before: gap,
+                });
+            }
+        }
+
+        rows
+    }
+
+    fn tree_dfs(
+        &self,
+        module_id: ModuleId,
+        depth: u16,
+        is_last: bool,
+        prefix: &mut Vec<bool>,
+        visited: &mut HashSet<ModuleId>,
+        rows: &mut Vec<TreeRow>,
+        gap_before: bool,
+    ) {
+        if visited.contains(&module_id) {
+            return;
+        }
+        visited.insert(module_id);
+
+        rows.push(TreeRow {
+            module_id,
+            depth,
+            is_last,
+            prefix: prefix.clone(),
+            gap_before,
+        });
+
+        // Upstream modules: things that connect TO this module
+        let mut upstream: Vec<ModuleId> = self.rack.connections_to(module_id)
+            .iter()
+            .map(|c| c.src.module_id)
+            .collect();
+
+        // Deterministic order and dedup
+        upstream.sort_by_key(|id| {
+            self.rack.order.iter().position(|&oid| oid == *id).unwrap_or(usize::MAX)
+        });
+        upstream.dedup();
+
+        prefix.push(is_last);
+        for (i, &child_id) in upstream.iter().enumerate() {
+            let child_is_last = i == upstream.len() - 1;
+            self.tree_dfs(child_id, depth + 1, child_is_last, prefix, visited, rows, false);
+        }
+        prefix.pop();
+    }
+
+    // --- Navigation ---
+
+    fn tree_select_next(&mut self) {
+        if !self.tree_rows.is_empty() && self.tree_selected < self.tree_rows.len() - 1 {
+            self.tree_selected += 1;
+            self.sync_rack_selected();
+        }
+    }
+
+    fn tree_select_prev(&mut self) {
+        if self.tree_selected > 0 {
+            self.tree_selected -= 1;
+            self.sync_rack_selected();
+        }
+    }
+
+    // --- Helpers ---
 
     fn format_params(&self, module: &Module) -> String {
         let mut parts = Vec::new();
 
-        // Show up to 2 key parameters
         for (i, param) in module.params.iter().take(2).enumerate() {
             if i >= 2 {
                 break;
@@ -116,15 +274,41 @@ impl RackPane {
         &mut self.rack
     }
 
+    /// Remove a module and rebuild tree
+    pub fn remove_module(&mut self, id: ModuleId) {
+        self.rack.remove_module(id);
+        self.rebuild_tree();
+    }
+
     /// Replace rack state (for loading)
     pub fn set_rack(&mut self, rack: RackState) {
         self.rack = rack;
         self.mode = RackMode::Normal;
         self.selected_port = 0;
         self.pending_src = None;
-        // Select first module if any exist
-        if !self.rack.order.is_empty() {
-            self.rack.selected = Some(0);
+        self.tree_selected = 0;
+        self.rebuild_tree();
+    }
+
+    /// Get the direction filter for the current connect phase
+    fn connect_direction_filter(&self) -> Option<PortDirection> {
+        match self.mode {
+            RackMode::ConnectSource => Some(PortDirection::Output),
+            RackMode::ConnectDest => Some(PortDirection::Input),
+            RackMode::Normal => None,
+        }
+    }
+
+    /// Get filtered ports for the selected module based on connect phase
+    fn filtered_ports(&self, module: &Module) -> Vec<usize> {
+        let ports = module.module_type.ports();
+        if let Some(dir) = self.connect_direction_filter() {
+            ports.iter().enumerate()
+                .filter(|(_, p)| p.direction == dir)
+                .map(|(i, _)| i)
+                .collect()
+        } else {
+            (0..ports.len()).collect()
         }
     }
 
@@ -132,37 +316,41 @@ impl RackPane {
     fn selected_module_port_count(&self) -> usize {
         self.rack
             .selected_module()
-            .map(|m| m.module_type.ports().len())
+            .map(|m| self.filtered_ports(m).len())
             .unwrap_or(0)
     }
 
     /// Get selected port for current module
     fn get_selected_port(&self) -> Option<PortRef> {
         let module = self.rack.selected_module()?;
+        let filtered = self.filtered_ports(module);
         let ports = module.module_type.ports();
-        ports.get(self.selected_port).map(|p| PortRef::new(module.id, p.name))
+        let &port_idx = filtered.get(self.selected_port)?;
+        Some(PortRef::new(module.id, ports[port_idx].name))
     }
 
     fn handle_normal_input(&mut self, event: InputEvent) -> Action {
         match self.keymap.lookup(&event) {
             Some("quit") => Action::Quit,
             Some("next") => {
-                self.rack.select_next();
+                self.tree_select_next();
                 Action::None
             }
             Some("prev") => {
-                self.rack.select_prev();
+                self.tree_select_prev();
                 Action::None
             }
             Some("goto_top") => {
-                if !self.rack.order.is_empty() {
-                    self.rack.selected = Some(0);
+                if !self.tree_rows.is_empty() {
+                    self.tree_selected = 0;
+                    self.sync_rack_selected();
                 }
                 Action::None
             }
             Some("goto_bottom") => {
-                if !self.rack.order.is_empty() {
-                    self.rack.selected = Some(self.rack.order.len() - 1);
+                if !self.tree_rows.is_empty() {
+                    self.tree_selected = self.tree_rows.len() - 1;
+                    self.sync_rack_selected();
                 }
                 Action::None
             }
@@ -194,7 +382,6 @@ impl RackPane {
                 // Delete connections from/to selected module
                 if let Some(module) = self.rack.selected_module() {
                     let module_id = module.id;
-                    // Get first connection involving this module
                     let conn = self.rack.connections
                         .iter()
                         .find(|c| c.src.module_id == module_id || c.dst.module_id == module_id)
@@ -220,12 +407,12 @@ impl RackPane {
                 Action::None
             }
             Some("next") => {
-                self.rack.select_next();
+                self.tree_select_next();
                 self.selected_port = 0;
                 Action::None
             }
             Some("prev") => {
-                self.rack.select_prev();
+                self.tree_select_prev();
                 self.selected_port = 0;
                 Action::None
             }
@@ -316,33 +503,56 @@ impl Pane for RackPane {
         // Determine layout based on mode
         let in_connect_mode = self.mode != RackMode::Normal;
         let max_visible = if in_connect_mode {
-            ((rect.height - 10) as usize).max(3) // Leave room for connection info
+            ((rect.height - 10) as usize).max(3)
         } else {
-            ((rect.height - 12) as usize).max(3) // Leave room for connections section
+            ((rect.height - 8) as usize).max(3)
         };
 
-        // Module list with viewport scrolling
         let list_y = content_y + 2;
-        let selected_idx = self.rack.selected.unwrap_or(0);
 
-        // Calculate scroll offset to keep selection visible
-        let scroll_offset = if selected_idx >= max_visible {
-            selected_idx - max_visible + 1
+        // Count display rows (tree rows + gap lines)
+        // Calculate total display height including gaps
+        let mut total_display = 0usize;
+        let mut row_to_display: Vec<usize> = Vec::new(); // maps tree_row index → display line
+        for (i, row) in self.tree_rows.iter().enumerate() {
+            if row.gap_before && i > 0 {
+                total_display += 1; // blank line
+            }
+            row_to_display.push(total_display);
+            total_display += 1;
+        }
+
+        // Calculate scroll offset based on selected item's display position
+        let selected_display = row_to_display.get(self.tree_selected).copied().unwrap_or(0);
+        let scroll_offset = if selected_display >= max_visible {
+            selected_display - max_visible + 1
         } else {
             0
         };
 
-        for (i, &module_id) in self.rack.order.iter().enumerate().skip(scroll_offset) {
-            let row = i - scroll_offset;
-            if row >= max_visible {
+        // Render tree rows
+        let mut display_line = 0usize;
+        for (i, row) in self.tree_rows.iter().enumerate() {
+            if row.gap_before && i > 0 {
+                display_line += 1; // skip a line for gap
+            }
+
+            if display_line < scroll_offset {
+                display_line += 1;
+                continue;
+            }
+            let screen_row = display_line - scroll_offset;
+            if screen_row >= max_visible {
                 break;
             }
-            let y = list_y + row as u16;
 
-            if let Some(module) = self.rack.modules.get(&module_id) {
-                let is_selected = self.rack.selected == Some(i);
+            let y = list_y + screen_row as u16;
+            let is_selected = i == self.tree_selected;
 
+            if let Some(module) = self.rack.modules.get(&row.module_id) {
                 let type_color = module_type_color(module.module_type);
+                let prefix = row.prefix_str();
+                let prefix_len = prefix.len() as u16;
 
                 // Selection indicator
                 if is_selected {
@@ -353,29 +563,49 @@ impl Pane for RackPane {
                     g.put_str(content_x, y, " ");
                 }
 
-                // Module name
+                // Tree prefix
+                if is_selected {
+                    g.set_style(Style::new().fg(Color::DARK_GRAY).bg(Color::SELECTION_BG));
+                } else {
+                    g.set_style(Style::new().fg(Color::DARK_GRAY));
+                }
+                if !prefix.is_empty() {
+                    g.put_str(content_x + 2, y, &prefix);
+                }
+
+                // Module name (truncate if tree is deep)
+                let name_col = content_x + 2 + prefix_len;
+                let name_width = 16u16.saturating_sub(prefix_len.min(12));
                 if is_selected {
                     g.set_style(Style::new().fg(Color::WHITE).bg(Color::SELECTION_BG));
                 } else {
                     g.set_style(Style::new().fg(Color::WHITE));
                 }
-                g.put_str(content_x + 2, y, &format!("{:16}", module.name));
+                let name_str = if module.name.len() > name_width as usize {
+                    &module.name[..name_width as usize]
+                } else {
+                    &module.name
+                };
+                g.put_str(name_col, y, &format!("{:width$}", name_str, width = name_width as usize));
 
                 // Module type (colored by category)
+                let type_col = content_x + 19;
                 if is_selected {
                     g.set_style(Style::new().fg(type_color).bg(Color::SELECTION_BG));
                 } else {
                     g.set_style(Style::new().fg(type_color));
                 }
                 let type_name = format!("{:18}", module.module_type.name());
-                g.put_str(content_x + 19, y, &type_name);
+                g.put_str(type_col, y, &type_name);
 
                 if in_connect_mode {
-                    // Show ports in connect mode (colored by port type)
+                    // Show ports filtered by direction for current connect phase
                     let ports = module.module_type.ports();
+                    let filtered = self.filtered_ports(module);
                     let mut port_x = content_x + 38;
-                    for (port_idx, port) in ports.iter().enumerate() {
-                        let is_port_selected = is_selected && port_idx == self.selected_port;
+                    for (fi, &port_idx) in filtered.iter().enumerate() {
+                        let port = &ports[port_idx];
+                        let is_port_selected = is_selected && fi == self.selected_port;
                         let port_color = port_type_color(port.port_type);
                         if is_port_selected {
                             g.set_style(Style::new().fg(Color::BLACK).bg(port_color).bold());
@@ -388,7 +618,6 @@ impl Pane for RackPane {
                         g.put_str(port_x, y, &port_str);
                         port_x += port_str.len() as u16 + 1;
                     }
-                    // Clear rest of line if selected
                     if is_selected {
                         g.set_style(Style::new().fg(Color::WHITE).bg(Color::SELECTION_BG));
                         for x in port_x..(rect.x + rect.width - 2) {
@@ -405,7 +634,6 @@ impl Pane for RackPane {
                     }
                     g.put_str(content_x + 38, y, &params_str);
 
-                    // Clear to end of selection if selected
                     if is_selected {
                         g.set_style(Style::new().bg(Color::SELECTION_BG));
                         let line_end = content_x + 38 + params_str.len() as u16;
@@ -415,6 +643,8 @@ impl Pane for RackPane {
                     }
                 }
             }
+
+            display_line += 1;
         }
 
         // Scroll indicators
@@ -422,39 +652,14 @@ impl Pane for RackPane {
             g.set_style(Style::new().fg(Color::ORANGE));
             g.put_str(rect.x + rect.width - 4, list_y, "...");
         }
-        if scroll_offset + max_visible < self.rack.order.len() {
+        if scroll_offset + max_visible < total_display {
             g.set_style(Style::new().fg(Color::ORANGE));
             g.put_str(rect.x + rect.width - 4, list_y + max_visible as u16 - 1, "...");
         }
 
-        // Show connections section in normal mode
-        let conn_y = list_y + max_visible as u16 + 1;
-        if !in_connect_mode && !self.rack.connections.is_empty() {
-            g.set_style(Style::new().fg(Color::PURPLE).bold());
-            g.put_str(content_x, conn_y, "Connections:");
-
-            let mut y = conn_y + 1;
-            for conn in self.rack.connections.iter().take(3) {
-                g.set_style(Style::new().fg(Color::TEAL));
-                // Format as module_name:port -> module_name:port
-                let src_name = self.rack.modules.get(&conn.src.module_id)
-                    .map(|m| m.name.as_str())
-                    .unwrap_or("?");
-                let dst_name = self.rack.modules.get(&conn.dst.module_id)
-                    .map(|m| m.name.as_str())
-                    .unwrap_or("?");
-                let conn_str = format!("  {}:{} -> {}:{}", src_name, conn.src.port_name, dst_name, conn.dst.port_name);
-                g.put_str(content_x, y, &conn_str);
-                y += 1;
-            }
-            if self.rack.connections.len() > 3 {
-                g.put_str(content_x, y, &format!("  ... and {} more", self.rack.connections.len() - 3));
-            }
-        }
-
         // Show connect mode status
+        let status_y = list_y + max_visible as u16 + 1;
         if in_connect_mode {
-            let status_y = conn_y;
             if let Some(ref src) = self.pending_src {
                 let src_name = self.rack.modules.get(&src.module_id)
                     .map(|m| m.name.as_str())
@@ -485,7 +690,7 @@ impl Pane for RackPane {
     }
 
     fn receive_action(&mut self, action: &Action) -> bool {
-        match action {
+        let handled = match action {
             Action::AddModule(module_type) => {
                 self.rack.add_module(*module_type);
                 true
@@ -503,7 +708,11 @@ impl Pane for RackPane {
                 true
             }
             _ => false,
+        };
+        if handled {
+            self.rebuild_tree();
         }
+        handled
     }
 
     fn as_any_mut(&mut self) -> &mut dyn Any {
