@@ -251,20 +251,25 @@ impl MixerPane {
 
         let mut x = base_x;
 
-        // Render strip channels
+        // Render strip channels (filled + empty slots)
         for i in 0..NUM_VISIBLE_CHANNELS {
             let idx = strip_scroll + i;
-            if idx >= state.strips.len() {
-                break;
-            }
-            let strip = &state.strips[idx];
-            let is_selected = matches!(state.mixer_selection, MixerSelection::Strip(s) if s == idx);
+            if idx < state.strips.len() {
+                let strip = &state.strips[idx];
+                let is_selected = matches!(state.mixer_selection, MixerSelection::Strip(s) if s == idx);
 
-            self.render_vertical_strip(
-                g, x, &format!("S{}", strip.id), &strip.name,
-                strip.level, strip.mute, strip.solo, Some(strip.output_target), is_selected,
-                label_y, name_y, meter_top_y, db_y, indicator_y, output_y,
-            );
+                self.render_vertical_strip(
+                    g, x, &format!("S{}", strip.id), &strip.name,
+                    strip.level, strip.mute, strip.solo, Some(strip.output_target), is_selected,
+                    label_y, name_y, meter_top_y, db_y, indicator_y, output_y,
+                );
+            } else {
+                // Empty unallocated channel slot
+                self.render_empty_strip(
+                    g, x, &format!("S{}", idx + 1),
+                    label_y, name_y, meter_top_y, db_y, indicator_y,
+                );
+            }
 
             x += STRIP_WIDTH;
         }
@@ -419,5 +424,35 @@ impl MixerPane {
             g.set_style(routing_style);
             g.put_str(x, output_y, Self::format_output(target));
         }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn render_empty_strip(
+        &self,
+        g: &mut dyn Graphics,
+        x: u16,
+        label: &str,
+        label_y: u16,
+        name_y: u16,
+        meter_top_y: u16,
+        db_y: u16,
+        indicator_y: u16,
+    ) {
+        let strip_w = (STRIP_WIDTH - 1) as usize;
+
+        g.set_style(Style::new().fg(Color::DARK_GRAY));
+        let label_str: String = label.chars().take(strip_w).collect();
+        g.put_str(x, label_y, &label_str);
+        g.put_str(x, name_y, "---");
+
+        let meter_x = x + (STRIP_WIDTH / 2).saturating_sub(1);
+        for row in 0..METER_HEIGHT {
+            g.set_style(Style::new().fg(Color::DARK_GRAY));
+            g.put_char(meter_x, meter_top_y + row, '\u{00b7}');
+        }
+
+        g.set_style(Style::new().fg(Color::DARK_GRAY));
+        g.put_str(x, db_y, "--");
+        g.put_str(x, indicator_y, "\u{25cf}");
     }
 }
