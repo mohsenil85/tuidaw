@@ -122,36 +122,3 @@ impl Style {
         self
     }
 }
-
-/// Semantic color categories for theming
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SemanticColor {
-    Text,
-    TextMuted,
-    Selected,
-    SelectedText,
-    Border,
-    BorderFocused,
-    Background,
-    Error,
-    Warning,
-    Success,
-}
-
-impl SemanticColor {
-    /// Get the default color for this semantic category
-    pub fn default_color(&self) -> Color {
-        match self {
-            SemanticColor::Text => Color::WHITE,
-            SemanticColor::TextMuted => Color::GRAY,
-            SemanticColor::Selected => Color::BLUE,
-            SemanticColor::SelectedText => Color::WHITE,
-            SemanticColor::Border => Color::GRAY,
-            SemanticColor::BorderFocused => Color::WHITE,
-            SemanticColor::Background => Color::BLACK,
-            SemanticColor::Error => Color::RED,
-            SemanticColor::Warning => Color::YELLOW,
-            SemanticColor::Success => Color::GREEN,
-        }
-    }
-}

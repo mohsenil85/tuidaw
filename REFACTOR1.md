@@ -81,16 +81,13 @@ parameter updates via this action will silently do nothing.
 Code that works but is leftover from previous design iterations,
 causing confusion or maintenance burden.
 
-### 2.1 Naming mismatch between docs and code
+### ~~2.1 Naming mismatch between docs and code~~ FIXED
 
-CLAUDE.md references `RackState`, `RackPane`, `ModuleId`, and
-describes a "rack" metaphor with "modules" connected by "connections."
-The actual code uses `StripState`, `StripPane`, `StripId`, and a
-"strip" metaphor with linear signal chains. The old
-rack/module/connection abstraction was replaced with channel strips,
-but CLAUDE.md wasn't fully updated.
-
-**Affected:** CLAUDE.md, `docs/architecture.md`, various doc comments.
+Rewrote CLAUDE.md, `docs/architecture.md`, and
+`docs/ai-coding-affordances.md` to use current Strip-based naming
+throughout. Removed all references to `RackState`, `RackPane`,
+`ModuleId`, `render_with_state()`, and the rack/module/connection
+metaphor.
 
 ### ~~2.2 `rebuild_routing()` backward-compat alias~~ FIXED
 
@@ -104,28 +101,23 @@ cleaned up all call sites in `dispatch.rs` and `playback.rs`,
 including the tuple types and variable extractions that carried the
 unused value.
 
-### 2.4 Global dead code suppression
+### ~~2.4 Global dead code suppression~~ FIXED
 
-**File:** `src/main.rs:1`
+Changed `#![allow(dead_code, unused_imports)]` to `#![allow(dead_code)]`
+only. Removed `unused_imports` suppression and cleaned up all unused
+imports across 10 files. `dead_code` is retained because much of the
+flagged code is intentional API surface (color constants, keymap bind
+variants, MIDI CC constants, sampler/automation methods) that isn't
+called yet but is part of the designed interface.
 
-```rust
-#![allow(dead_code, unused_imports)]
-```
+### ~~2.5 Piano keyboard mapping duplicated 3 times~~ FIXED
 
-Blanket suppression across the entire crate. Hides genuine unused code
--- there's no way to know what's actually dead without removing this
-and checking compiler warnings.
-
-### 2.5 Piano keyboard mapping duplicated 3 times
-
-**Files:**
-- `src/panes/piano_roll_pane.rs` -- `key_to_offset_c()` /
-  `key_to_offset_a()`
-- `src/panes/strip_pane.rs` -- identical functions
-- `src/panes/strip_edit_pane.rs` -- identical functions
-
-Three copies of the same QWERTY-to-pitch mapping. If the layout
-changes, all three must be updated in sync.
+Extracted `PianoKeyboard` struct into `src/ui/piano_keyboard.rs` with
+all shared state (`active`, `octave`, `layout`) and methods
+(`key_to_pitch`, `handle_escape`, `octave_up/down`, `status_label`,
+`activate/deactivate`). All three panes (`StripPane`, `PianoRollPane`,
+`StripEditPane`) now hold a `PianoKeyboard` field and delegate to it.
+Removed ~200 lines of duplicated code.
 
 ### 2.6 `PushPane`/`PopPane` actions defined but not implemented
 
@@ -146,19 +138,14 @@ Action::PopPane => {}    // no-op
 The modal stack concept was planned but never implemented. `PushPane`
 just switches (no stack push), `PopPane` does nothing.
 
-### 2.7 `SemanticColor` enum defined but never used
+### ~~2.7 `SemanticColor` enum defined but never used~~ FIXED
 
-**File:** `src/ui/style.rs:127-157`
+Removed the `SemanticColor` enum and its `impl` block from
+`src/ui/style.rs`, and removed the re-export from `src/ui/mod.rs`.
 
-A full themed color abstraction (`Text`, `TextMuted`, `Selected`,
-`Border`, etc.) with default colors defined. No pane references it --
-all use concrete `Color::` constants.
+### ~~2.8 `Keymap::merge()` exists but is never called~~ FIXED
 
-### 2.8 `Keymap::merge()` exists but is never called
-
-**File:** `src/ui/keymap.rs:161-168`
-
-Combines two keymaps with right-precedence. No caller in the codebase.
+Removed the unused `merge()` method from `src/ui/keymap.rs`.
 
 ### 2.9 `SequencerPane` is a placeholder
 
@@ -288,84 +275,38 @@ still use the full `rebuild_strip_routing()`.
 
 ```
 main.rs event loop
+  AppState (owned by main.rs)
+    strip: StripState
+    audio_in_waveform: Option<Vec<f32>>
+
   PaneManager
     panes: Vec<Box<dyn Pane>>
     active_index: usize
 
-  StripPane owns StripState (the entire app state)
-  Other panes (Mixer, PianoRoll, Add) need StripState for rendering
+  Pane trait:
+    handle_input(&mut self, event, &AppState) -> Action
+    render(&self, g, &AppState)
 
-  Workaround: clone StripState every frame, pass to render_with_state()
+  dispatch::dispatch_action() mutates AppState, configures panes, calls AudioEngine
 ```
 
-The central problem: **all application state lives inside a single
-pane** (`StripPane`). Other panes need that state for rendering and
-input handling, but Rust's borrow checker prevents holding two `&mut`
-references into `PaneManager` simultaneously.
+State is owned by `main.rs` and passed to all panes by reference. No
+cloning, no `render_with_state()` workaround. Action dispatch lives
+in `src/dispatch.rs`.
 
-The current workaround clones `StripState` every frame for mixer and
-piano roll rendering. This also forces the `render_with_state()`
-pattern, which requires special-casing in main.rs for every pane that
-needs external data.
+### ~~Proposed: Extract state from panes~~ DONE
 
-### Proposed: Extract state from panes
+Moved `StripState` out of `StripPane` into a top-level `AppState`
+owned by `main.rs`. The `Pane` trait now passes `&AppState` to both
+`handle_input()` and `render()`. Eliminated frame-by-frame cloning,
+all `render_with_state()` variants, and the special-case render block
+in main.rs. Action dispatch moved to `src/dispatch.rs` which operates
+directly on `&mut AppState`.
 
-Move `StripState` (and other shared state) out of `StripPane` and into
-a top-level `AppState` that lives alongside the pane manager:
-
-```rust
-struct AppState {
-    strips: StripState,
-    session: SessionState,
-}
-
-fn run(backend: &mut RatatuiBackend) -> io::Result<()> {
-    let mut state = AppState::new();
-    let mut panes = PaneManager::new();
-    let mut audio_engine = AudioEngine::new();
-
-    loop {
-        // Input: panes can read state to decide what action to emit
-        let action = panes.handle_input(event, &state);
-
-        // Dispatch: pure state mutation, no pane access needed
-        dispatch_action(&action, &mut state, &mut audio_engine);
-
-        // Render: all panes receive state as a read-only reference
-        panes.render(&mut frame, &state);
-    }
-}
-```
-
-The `Pane` trait changes to accept `&AppState`:
-
-```rust
-trait Pane {
-    fn handle_input(&mut self, event: InputEvent, state: &AppState) -> Action;
-    fn render(&self, g: &mut dyn Graphics, state: &AppState);
-    // ...
-}
-```
-
-**What this eliminates:**
-- Frame-by-frame `StripState` cloning
-- All `render_with_state()` / `render_with_registry()` /
-  `render_with_full_state()` variants
-- All `get_pane_mut::<StripPane>("strip")` downcasting in dispatch.rs
-- The special-case render block in main.rs (lines 213-267)
-- The `as_any_mut()` requirement on the Pane trait
-
-**What this changes:**
-- Every pane's `render()` and `handle_input()` signatures
-- `dispatch_action()` takes `&mut AppState` instead of `&mut
-  PaneManager`
-- Panes that currently own state (`StripPane`, `StripEditPane`,
-  `FrameEditPane`) become pure UI views
-
-This is a mechanical refactor -- each pane needs its method signatures
-updated, but the logic inside each method stays the same. The dispatch
-module becomes simpler because it operates directly on `AppState`
-instead of reaching through pane downcasts.
+Note: `as_any_mut()` is still on the Pane trait because
+`dispatch_action()` uses `PaneManager::get_pane_mut::<T>()` to
+configure target panes (e.g., setting strip data on `StripEditPane`
+before switching to it).
 
 ### Proposed: Split the Action enum
 
@@ -426,30 +367,10 @@ Each pane only constructs actions from its own sub-enum. The dispatch
 module matches on the outer enum and delegates to focused handler
 functions.
 
-### Proposed: Extract piano keyboard utility
+### ~~Proposed: Extract piano keyboard utility~~ DONE
 
-Create `src/ui/piano_keyboard.rs`:
-
-```rust
-pub struct PianoKeyboard {
-    pub octave: i8,
-    pub layout: KeyboardLayout,
-}
-
-pub enum KeyboardLayout {
-    LayoutC,  // z=C, x=D, c=E, ...
-    LayoutA,  // a=C, s=D, d=E, ...
-}
-
-impl PianoKeyboard {
-    pub fn key_to_pitch(&self, key: char) -> Option<u8>;
-    pub fn adjust_octave(&mut self, delta: i8);
-}
-```
-
-Replace the three duplicated `key_to_offset_c()` / `key_to_offset_a()`
-implementations in `StripPane`, `StripEditPane`, and `PianoRollPane`
-with a shared `PianoKeyboard` instance.
+Created `src/ui/piano_keyboard.rs` with `PianoKeyboard` struct and
+`PianoLayout` enum. See item 2.5 for details.
 
 ### Proposed: Implement proper pane stack
 
@@ -505,22 +426,26 @@ confirmations) that return to the previous context.
    share the allocator's address space with strip buses, preventing
    collisions
 
-### Next: Medium-term (structural)
+### ~~Medium-term (structural)~~ MOSTLY DONE
 
-9. **Extract `AppState` from panes** -- eliminates clone-per-frame and
-   render_with_state pattern
-10. **Extract piano keyboard utility** -- deduplicate 3 copies
+9. ~~**Extract `AppState` from panes**~~ -- done; `AppState` owned by
+   `main.rs`, passed to all panes via `&AppState`
+10. ~~**Extract piano keyboard utility**~~ -- done; `PianoKeyboard`
+    in `src/ui/piano_keyboard.rs`
 11. **Add `source_node` to `VoiceChain`** -- enables sampler
-    automation
+    automation (bug 1.3)
 12. **Implement `SetStripParam` action** -- real-time parameter
-    updates from UI
+    updates from UI (bug 1.4)
 
 ### Longer-term (cleanup)
 
 13. **Split Action enum** into sub-enums
-14. **Implement pane stack** for proper modals
-15. **Remove `#![allow(dead_code)]`** and clean up actual dead code
-16. **Update CLAUDE.md** to match current Strip-based naming
-17. **Remove unused `SemanticColor`**, `Keymap::merge()`, serde
-    derives
+14. **Implement pane stack** for proper modals (relates to 2.6)
+15. ~~**Remove `#![allow(dead_code)]`**~~ -- partially done; removed
+    `unused_imports` suppression and cleaned up all unused imports;
+    `dead_code` retained for API surface code
+16. ~~**Update CLAUDE.md**~~ -- done; complete rewrite of CLAUDE.md,
+    architecture.md, and ai-coding-affordances.md
+17. ~~**Remove unused `SemanticColor`**, `Keymap::merge()`~~ -- done;
+    serde derives cleanup still outstanding (2.10)
 18. **Remove or implement `SequencerPane`**

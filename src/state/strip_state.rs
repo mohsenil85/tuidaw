@@ -6,7 +6,7 @@ use super::midi_recording::MidiRecordingState;
 use super::piano_roll::PianoRollState;
 use super::strip::*;
 
-use crate::ui::frame::SessionState;
+
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MixerSelection {
@@ -279,6 +279,7 @@ impl Default for StripState {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ui::frame::SessionState;
 
     #[test]
     fn test_strip_state_creation() {

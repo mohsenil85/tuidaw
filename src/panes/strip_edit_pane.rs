@@ -1,11 +1,11 @@
 use std::any::Any;
 
 use crate::state::{
-    AppState, EffectSlot, EffectType, EnvConfig, FilterConfig, FilterType, LfoConfig, LfoShape, LfoTarget,
+    AppState, EffectSlot, EffectType, EnvConfig, FilterConfig, FilterType, LfoConfig,
     OscType, Param, ParamValue, StripId, Strip,
 };
 use crate::ui::widgets::TextInput;
-use crate::ui::{Action, Color, Graphics, InputEvent, KeyCode, Keymap, Pane, Rect, Style};
+use crate::ui::{Action, Color, Graphics, InputEvent, KeyCode, Keymap, Pane, PianoKeyboard, Rect, Style};
 
 /// Which section a row belongs to
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -15,13 +15,6 @@ enum Section {
     Effects,
     Lfo,
     Envelope,
-}
-
-/// Piano keyboard layout
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum PianoLayout {
-    C,
-    A,
 }
 
 pub struct StripEditPane {
@@ -39,10 +32,7 @@ pub struct StripEditPane {
     selected_row: usize,
     editing: bool,
     edit_input: TextInput,
-    // Piano mode
-    piano_mode: bool,
-    piano_octave: i8,
-    piano_layout: PianoLayout,
+    piano: PianoKeyboard,
 }
 
 impl StripEditPane {
@@ -83,9 +73,7 @@ impl StripEditPane {
             selected_row: 0,
             editing: false,
             edit_input: TextInput::new(""),
-            piano_mode: false,
-            piano_octave: 4,
-            piano_layout: PianoLayout::C,
+            piano: PianoKeyboard::new(),
         }
     }
 
@@ -368,42 +356,6 @@ impl StripEditPane {
         }
     }
 
-    // Piano key mapping
-    fn key_to_offset_c(key: char) -> Option<u8> {
-        match key {
-            'a' => Some(0), 's' => Some(2), 'd' => Some(4), 'f' => Some(5),
-            'g' => Some(7), 'h' => Some(9), 'j' => Some(11),
-            'w' => Some(1), 'e' => Some(3), 't' => Some(6), 'y' => Some(8), 'u' => Some(10),
-            'k' => Some(12), 'l' => Some(14), ';' => Some(16),
-            'o' => Some(13), 'p' => Some(15),
-            _ => None,
-        }
-    }
-
-    fn key_to_offset_a(key: char) -> Option<u8> {
-        match key {
-            'a' => Some(0), 's' => Some(2), 'd' => Some(3), 'f' => Some(5),
-            'g' => Some(7), 'h' => Some(8), 'j' => Some(10),
-            'w' => Some(1), 'e' => Some(4), 't' => Some(6), 'y' => Some(9), 'u' => Some(11),
-            'k' => Some(12), 'l' => Some(14), ';' => Some(15),
-            'o' => Some(13), 'p' => Some(16),
-            _ => None,
-        }
-    }
-
-    fn key_to_pitch(&self, key: char) -> Option<u8> {
-        let offset = match self.piano_layout {
-            PianoLayout::C => Self::key_to_offset_c(key),
-            PianoLayout::A => Self::key_to_offset_a(key),
-        };
-        offset.map(|off| {
-            let base = match self.piano_layout {
-                PianoLayout::C => (self.piano_octave as i16 + 1) * 12,
-                PianoLayout::A => (self.piano_octave as i16 + 1) * 12 - 3,
-            };
-            (base + off as i16).clamp(0, 127) as u8
-        })
-    }
 }
 
 fn adjust_param(param: &mut Param, increase: bool, fraction: f32) {
@@ -472,21 +424,18 @@ impl Pane for StripEditPane {
         }
 
         // Piano mode
-        if self.piano_mode {
+        if self.piano.is_active() {
             match event.key {
                 KeyCode::Char('/') => {
-                    match self.piano_layout {
-                        PianoLayout::C => self.piano_layout = PianoLayout::A,
-                        PianoLayout::A => self.piano_mode = false,
-                    }
+                    self.piano.handle_escape();
                     return Action::None;
                 }
                 KeyCode::Char('[') => {
-                    if self.piano_octave > -1 { self.piano_octave -= 1; }
+                    self.piano.octave_down();
                     return Action::None;
                 }
                 KeyCode::Char(']') => {
-                    if self.piano_octave < 9 { self.piano_octave += 1; }
+                    self.piano.octave_up();
                     return Action::None;
                 }
                 KeyCode::Up => {
@@ -518,7 +467,7 @@ impl Pane for StripEditPane {
                     return self.emit_update();
                 }
                 KeyCode::Char(c) => {
-                    if let Some(pitch) = self.key_to_pitch(c) {
+                    if let Some(pitch) = self.piano.key_to_pitch(c) {
                         let velocity = if event.modifiers.shift { 127 } else { 100 };
                         return Action::StripPlayNote(pitch, velocity);
                     }
@@ -587,8 +536,7 @@ impl Pane for StripEditPane {
                 return self.emit_update();
             }
             Some("piano_mode") => {
-                self.piano_mode = true;
-                self.piano_layout = PianoLayout::C;
+                self.piano.activate();
             }
             Some("next") => {
                 let total = self.total_rows();
@@ -750,10 +698,9 @@ impl Pane for StripEditPane {
         g.put_str(mode_x + 7, rect.y, if self.has_track { " TRK " } else { " --- " });
 
         // Piano mode indicator
-        if self.piano_mode {
+        if self.piano.is_active() {
             g.set_style(Style::new().fg(Color::BLACK).bg(Color::PINK));
-            let layout_char = match self.piano_layout { PianoLayout::C => 'C', PianoLayout::A => 'A' };
-            let piano_str = format!(" PIANO {}{} ", layout_char, self.piano_octave);
+            let piano_str = self.piano.status_label();
             g.put_str(rect.x + 1, rect.y, &piano_str);
         }
 
@@ -975,7 +922,7 @@ impl Pane for StripEditPane {
         // Help text
         let help_y = rect.y + rect.height - 2;
         g.set_style(Style::new().fg(Color::DARK_GRAY));
-        if self.piano_mode {
+        if self.piano.is_active() {
             g.put_str(content_x, help_y, "Play keys | [/]: octave | ←/→: adjust | \\: zero | /: cycle/exit");
         } else {
             g.put_str(content_x, help_y, "↑/↓: move | Tab/S-Tab: section | ←/→: adjust | \\: zero | /: piano | Esc: done");
@@ -987,7 +934,7 @@ impl Pane for StripEditPane {
     }
 
     fn wants_exclusive_input(&self) -> bool {
-        self.editing || self.piano_mode
+        self.editing || self.piano.is_active()
     }
 
     fn as_any_mut(&mut self) -> &mut dyn Any {

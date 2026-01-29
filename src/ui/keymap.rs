@@ -158,14 +158,6 @@ impl Keymap {
         &self.bindings
     }
 
-    /// Merge another keymap into this one (other takes precedence)
-    pub fn merge(mut self, other: Keymap) -> Self {
-        // Remove any bindings that would be overridden
-        self.bindings
-            .retain(|b| !other.bindings.iter().any(|o| o.pattern == b.pattern));
-        self.bindings.extend(other.bindings);
-        self
-    }
 }
 
 #[cfg(test)]

@@ -1,7 +1,5 @@
 use std::sync::mpsc::{self, Receiver, Sender};
-use std::sync::{Arc, Mutex};
-
-use midir::{MidiInput, MidiInputConnection, MidiInputPort};
+use midir::{MidiInput, MidiInputConnection};
 
 /// MIDI event types
 #[derive(Debug, Clone, Copy)]

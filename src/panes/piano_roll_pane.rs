@@ -2,7 +2,7 @@ use std::any::Any;
 
 use crate::state::piano_roll::PianoRollState;
 use crate::state::AppState;
-use crate::ui::{Action, Color, Graphics, InputEvent, KeyCode, Keymap, Pane, Rect, Style};
+use crate::ui::{Action, Color, Graphics, InputEvent, KeyCode, Keymap, Pane, PianoKeyboard, Rect, Style};
 
 /// Waveform display characters (8 levels)
 const WAVEFORM_CHARS: [char; 8] = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
@@ -20,13 +20,6 @@ fn is_black_key(pitch: u8) -> bool {
     matches!(pitch % 12, 1 | 3 | 6 | 8 | 10)
 }
 
-/// Piano keyboard layout starting note
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum PianoLayout {
-    C, // Standard C-based layout
-    A, // A-based layout (natural minor friendly)
-}
-
 pub struct PianoRollPane {
     keymap: Keymap,
     // Cursor state
@@ -41,9 +34,7 @@ pub struct PianoRollPane {
     default_duration: u32,
     default_velocity: u8,
     // Piano keyboard mode
-    piano_mode: bool,       // When true, letter keys play notes
-    piano_octave: i8,       // Current octave for keyboard input (default 4 = C4)
-    piano_layout: PianoLayout, // C or A starting layout
+    piano: PianoKeyboard,
     recording: bool,            // True when recording notes from piano keyboard
 }
 
@@ -81,87 +72,9 @@ impl PianoRollPane {
             zoom_level: 3, // Each cell = 120 ticks (1/4 beat at 480 tpb)
             default_duration: 480, // One beat
             default_velocity: 100,
-            piano_mode: false,
-            piano_octave: 4, // C4 = MIDI 60
-            piano_layout: PianoLayout::C,
+            piano: PianoKeyboard::new(),
             recording: false,
         }
-    }
-
-    /// Map a keyboard character to a MIDI note offset for C layout
-    /// Layout: A=C, W=C#, S=D, E=D#, D=E, F=F, T=F#, G=G, Y=G#, H=A, U=A#, J=B
-    fn key_to_offset_c(key: char) -> Option<u8> {
-        match key {
-            // First octave - white keys
-            'a' => Some(0),   // C
-            's' => Some(2),   // D
-            'd' => Some(4),   // E
-            'f' => Some(5),   // F
-            'g' => Some(7),   // G
-            'h' => Some(9),   // A
-            'j' => Some(11),  // B
-            // First octave - black keys
-            'w' => Some(1),   // C#
-            'e' => Some(3),   // D#
-            't' => Some(6),   // F#
-            'y' => Some(8),   // G#
-            'u' => Some(10),  // A#
-            // Second octave - white keys
-            'k' => Some(12),  // C
-            'l' => Some(14),  // D
-            ';' => Some(16),  // E
-            // Second octave - black keys
-            'o' => Some(13),  // C#
-            'p' => Some(15),  // D#
-            _ => None,
-        }
-    }
-
-    /// Map a keyboard character to a MIDI note offset for A layout (natural minor friendly)
-    /// Layout: A=A, W=A#, S=B, D=C, E=C#, F=D, T=D#, G=E, H=F, Y=F#, J=G, U=G#
-    /// Note: No black key between S(B) and D(C), or between G(E) and H(F)
-    fn key_to_offset_a(key: char) -> Option<u8> {
-        match key {
-            // First octave - white keys (A B C D E F G)
-            'a' => Some(0),   // A
-            's' => Some(2),   // B
-            'd' => Some(3),   // C
-            'f' => Some(5),   // D
-            'g' => Some(7),   // E
-            'h' => Some(8),   // F
-            'j' => Some(10),  // G
-            // First octave - black keys
-            'w' => Some(1),   // A#
-            'e' => Some(4),   // C#
-            't' => Some(6),   // D#
-            'y' => Some(9),   // F#
-            'u' => Some(11),  // G#
-            // Second octave - white keys
-            'k' => Some(12),  // A
-            'l' => Some(14),  // B
-            ';' => Some(15),  // C
-            // Second octave - black keys
-            'o' => Some(13),  // A#
-            'p' => Some(16),  // C#
-            _ => None,
-        }
-    }
-
-    /// Convert a key to a MIDI pitch using current octave and layout
-    fn key_to_pitch(&self, key: char) -> Option<u8> {
-        let offset = match self.piano_layout {
-            PianoLayout::C => Self::key_to_offset_c(key),
-            PianoLayout::A => Self::key_to_offset_a(key),
-        };
-        offset.map(|off| {
-            // For C layout: octave 4 base = C4 = MIDI 60
-            // For A layout: octave 4 base = A3 = MIDI 57 (so A4 = 69, but we want A at octave 4 to feel like C4)
-            let base = match self.piano_layout {
-                PianoLayout::C => (self.piano_octave as i16 + 1) * 12, // C4 = 60
-                PianoLayout::A => (self.piano_octave as i16 + 1) * 12 - 3, // A3 = 57 for "octave 4"
-            };
-            (base + off as i16).clamp(0, 127) as u8
-        })
     }
 
     // Accessors for main.rs
@@ -170,7 +83,7 @@ impl PianoRollPane {
     pub fn default_duration(&self) -> u32 { self.default_duration }
     pub fn default_velocity(&self) -> u8 { self.default_velocity }
     pub fn current_track(&self) -> usize { self.current_track }
-    pub fn is_piano_mode(&self) -> bool { self.piano_mode }
+    pub fn is_piano_mode(&self) -> bool { self.piano.is_active() }
     pub fn is_recording(&self) -> bool { self.recording }
     pub fn set_recording(&mut self, recording: bool) { self.recording = recording; }
 
@@ -237,7 +150,7 @@ impl PianoRollPane {
     /// Center the view vertically on the current piano octave
     fn center_view_on_piano_octave(&mut self) {
         // Piano octave base note: octave 4 = C4 = MIDI 60
-        let base_pitch = ((self.piano_octave as i16 + 1) * 12).clamp(0, 127) as u8;
+        let base_pitch = ((self.piano.octave() as i16 + 1) * 12).clamp(0, 127) as u8;
         // Center the view so the octave is roughly in the middle
         // visible_rows is about 24, so offset by ~12 to center
         let visible_rows = 24u8;
@@ -516,12 +429,8 @@ impl PianoRollPane {
         g.put_str(rect.x + 1, status_y, &vel_str);
 
         // Piano mode indicator on right side of status line
-        if self.piano_mode {
-            let layout_char = match self.piano_layout {
-                PianoLayout::C => 'C',
-                PianoLayout::A => 'A',
-            };
-            let piano_str = format!(" PIANO {}{} ", layout_char, self.piano_octave);
+        if self.piano.is_active() {
+            let piano_str = self.piano.status_label();
             let mut indicator_x = rect.x + rect.width - piano_str.len() as u16 - 1;
 
             if self.recording {
@@ -565,34 +474,27 @@ impl Pane for PianoRollPane {
         }
 
         // Piano mode: letter keys play notes, minimal other keys work
-        if self.piano_mode {
+        if self.piano.is_active() {
             match event.key {
                 KeyCode::Tab => {
-                    // Cycle: C -> A -> exit
-                    match self.piano_layout {
-                        PianoLayout::C => self.piano_layout = PianoLayout::A,
-                        PianoLayout::A => self.piano_mode = false,
-                    }
+                    self.piano.handle_escape();
                     return Action::None;
                 }
                 KeyCode::Char('[') => {
-                    if self.piano_octave > -1 {
-                        self.piano_octave -= 1;
+                    if self.piano.octave_down() {
                         self.center_view_on_piano_octave();
                     }
                     return Action::None;
                 }
                 KeyCode::Char(']') => {
-                    if self.piano_octave < 9 {
-                        self.piano_octave += 1;
+                    if self.piano.octave_up() {
                         self.center_view_on_piano_octave();
                     }
                     return Action::None;
                 }
                 KeyCode::Char(' ') => return Action::PianoRollPlayStopRecord,
                 KeyCode::Char(c) => {
-                    // Piano keys: map character to MIDI pitch
-                    if let Some(pitch) = self.key_to_pitch(c) {
+                    if let Some(pitch) = self.piano.key_to_pitch(c) {
                         let velocity = if event.modifiers.shift { 127 } else { 100 };
                         return Action::PianoRollPlayNote(pitch, velocity);
                     }
@@ -674,8 +576,7 @@ impl Pane for PianoRollPane {
             Some("time_sig") => Action::PianoRollCycleTimeSig,
             Some("toggle_poly") => Action::PianoRollTogglePolyMode,
             Some("piano_mode") => {
-                self.piano_mode = true;
-                self.piano_layout = PianoLayout::C; // Always start with C layout
+                self.piano.activate();
                 Action::None
             }
             _ => Action::None,
@@ -703,7 +604,7 @@ impl Pane for PianoRollPane {
     }
 
     fn wants_exclusive_input(&self) -> bool {
-        self.piano_mode
+        self.piano.is_active()
     }
 
     fn as_any_mut(&mut self) -> &mut dyn Any {

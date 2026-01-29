@@ -4,7 +4,7 @@ use crate::audio::{self, AudioEngine};
 use crate::panes::{FileBrowserPane, PianoRollPane, ServerPane, StripEditPane};
 use crate::scd_parser;
 use crate::state::{AppState, CustomSynthDef, MixerSelection, ParamSpec, StripState};
-use crate::ui::{Action, FileSelectAction, Frame, PaneManager};
+use crate::ui::{Action, Frame, PaneManager};
 
 /// Default path for save file
 pub fn default_rack_path() -> PathBuf {

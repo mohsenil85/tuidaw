@@ -8,7 +8,7 @@ use std::time::Duration;
 
 use super::bus_allocator::BusAllocator;
 use super::osc_client::OscClient;
-use crate::state::{AutomationTarget, BufferId, CustomSynthDefRegistry, EffectType, FilterType, OscType, Param, ParamValue, StripId, StripState};
+use crate::state::{AutomationTarget, BufferId, CustomSynthDefRegistry, EffectType, FilterType, OscType, ParamValue, StripId, StripState};
 
 pub type ModuleId = u32;
 
