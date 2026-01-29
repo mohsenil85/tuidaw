@@ -32,25 +32,32 @@ impl Color {
     pub const PURPLE: Color = Color::new(147, 112, 219);
     pub const LIME: Color = Color::new(50, 205, 50);
     pub const TEAL: Color = Color::new(0, 128, 128);
+    #[allow(dead_code)]
     pub const CORAL: Color = Color::new(255, 127, 80);
     pub const SKY_BLUE: Color = Color::new(135, 206, 235);
     pub const GOLD: Color = Color::new(255, 215, 0);
 
     // Module type colors
+    #[allow(dead_code)]
     pub const MIDI_COLOR: Color = Color::new(255, 100, 160);   // Magenta - MIDI/note source
     pub const OSC_COLOR: Color = Color::new(100, 180, 255);    // Blue - oscillators
     pub const FILTER_COLOR: Color = Color::new(255, 140, 90);  // Orange - filters
     pub const ENV_COLOR: Color = Color::new(180, 130, 255);    // Purple - envelopes
+    #[allow(dead_code)]
     pub const LFO_COLOR: Color = Color::new(130, 255, 180);    // Mint - LFOs
     pub const FX_COLOR: Color = Color::new(255, 180, 220);     // Pink - effects
+    #[allow(dead_code)]
     pub const OUTPUT_COLOR: Color = Color::new(255, 220, 100); // Gold - output
     pub const AUDIO_IN_COLOR: Color = Color::new(100, 255, 200); // Teal/Cyan - audio input
     pub const SAMPLER_COLOR: Color = Color::new(255, 200, 100); // Warm orange - sampler
     pub const CUSTOM_COLOR: Color = Color::new(200, 150, 255); // Light purple - custom synthdef
 
     // Port type colors
+    #[allow(dead_code)]
     pub const AUDIO_PORT: Color = Color::new(80, 200, 255);    // Cyan - audio
+    #[allow(dead_code)]
     pub const CONTROL_PORT: Color = Color::new(100, 255, 150); // Green - control
+    #[allow(dead_code)]
     pub const GATE_PORT: Color = Color::new(255, 230, 80);     // Yellow - gate
 
     // Meter colors
@@ -117,6 +124,7 @@ impl Style {
         self
     }
 
+    #[allow(dead_code)]
     pub const fn underline(mut self) -> Self {
         self.underline = true;
         self

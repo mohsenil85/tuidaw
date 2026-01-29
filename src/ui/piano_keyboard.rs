@@ -42,6 +42,7 @@ impl PianoKeyboard {
         self.layout = PianoLayout::C;
     }
 
+    #[allow(dead_code)]
     pub fn deactivate(&mut self) {
         self.active = false;
     }

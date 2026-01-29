@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 /// Musical key (pitch class)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Key {

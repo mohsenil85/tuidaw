@@ -45,6 +45,7 @@ impl FrameEditPane {
     }
 
     /// Set session state to edit (called before switching to this pane)
+    #[allow(dead_code)]
     pub fn set_session(&mut self, session: SessionState) {
         self.session = session;
         self.selected = 0;

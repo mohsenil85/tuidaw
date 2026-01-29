@@ -99,12 +99,14 @@ impl PianoRollState {
     }
 
     /// Find a note at the given pitch and tick (exact match on tick start)
+    #[allow(dead_code)]
     pub fn find_note(&self, track_index: usize, pitch: u8, tick: u32) -> Option<&Note> {
         self.track_at(track_index)
             .and_then(|track| track.notes.iter().find(|n| n.pitch == pitch && n.tick == tick))
     }
 
     /// Find notes that start within a tick range (for playback)
+    #[allow(dead_code)]
     pub fn notes_in_range(&self, track_index: usize, start_tick: u32, end_tick: u32) -> Vec<&Note> {
         if let Some(track) = self.track_at(track_index) {
             track
@@ -129,6 +131,7 @@ impl PianoRollState {
     }
 
     /// Convert a beat number to ticks
+    #[allow(dead_code)]
     pub fn beat_to_tick(&self, beat: u32) -> u32 {
         beat * self.ticks_per_beat
     }

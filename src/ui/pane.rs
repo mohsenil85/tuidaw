@@ -9,6 +9,7 @@ use crate::state::{AppState, EffectType, FilterType, OscType, StripId};
 #[derive(Debug, Clone, PartialEq)]
 pub enum NavAction {
     SwitchPane(&'static str),
+    #[allow(dead_code)]
     PushPane(&'static str),
     PopPane,
 }
@@ -20,11 +21,17 @@ pub enum StripAction {
     Delete(StripId),
     Edit(StripId),
     Update(StripId),
+    #[allow(dead_code)]
     SetParam(StripId, String, f32),
+    #[allow(dead_code)]
     AddEffect(StripId, EffectType),
+    #[allow(dead_code)]
     RemoveEffect(StripId, usize),
+    #[allow(dead_code)]
     MoveEffect(StripId, usize, i8),
+    #[allow(dead_code)]
     SetFilter(StripId, Option<FilterType>),
+    #[allow(dead_code)]
     ToggleTrack(StripId),
     PlayNote(u8, u8),
     SelectNext,
@@ -52,6 +59,7 @@ pub enum MixerAction {
 #[derive(Debug, Clone, PartialEq)]
 pub enum PianoRollAction {
     ToggleNote,
+    #[allow(dead_code)]
     MoveCursor(i8, i32),
     AdjustDuration(i32),
     AdjustVelocity(i8),
@@ -60,8 +68,11 @@ pub enum PianoRollAction {
     SetLoopStart,
     SetLoopEnd,
     ChangeTrack(i8),
+    #[allow(dead_code)]
     SetBpm(f32),
+    #[allow(dead_code)]
     Zoom(i8),
+    #[allow(dead_code)]
     ScrollOctave(i8),
     Jump(i8),
     CycleTimeSig,
@@ -237,11 +248,13 @@ impl PaneManager {
     }
 
     /// Get the keymap of the active pane
+    #[allow(dead_code)]
     pub fn active_keymap(&self) -> &Keymap {
         self.active().keymap()
     }
 
     /// Get all registered pane IDs
+    #[allow(dead_code)]
     pub fn pane_ids(&self) -> Vec<&'static str> {
         self.panes.iter().map(|p| p.id()).collect()
     }

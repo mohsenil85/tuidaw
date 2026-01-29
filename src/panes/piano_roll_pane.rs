@@ -83,7 +83,6 @@ impl PianoRollPane {
     pub fn default_duration(&self) -> u32 { self.default_duration }
     pub fn default_velocity(&self) -> u8 { self.default_velocity }
     pub fn current_track(&self) -> usize { self.current_track }
-    pub fn is_piano_mode(&self) -> bool { self.piano.is_active() }
     pub fn is_recording(&self) -> bool { self.recording }
     pub fn set_recording(&mut self, recording: bool) { self.recording = recording; }
 

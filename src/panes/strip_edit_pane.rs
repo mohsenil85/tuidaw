@@ -91,6 +91,7 @@ impl StripEditPane {
         self.selected_row = 0;
     }
 
+    #[allow(dead_code)]
     pub fn strip_id(&self) -> Option<StripId> {
         self.strip_id
     }

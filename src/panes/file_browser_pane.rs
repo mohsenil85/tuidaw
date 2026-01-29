@@ -118,16 +118,6 @@ impl FileBrowserPane {
         }
     }
 
-    fn ensure_visible(&mut self, visible_height: usize) {
-        if visible_height == 0 {
-            return;
-        }
-        if self.selected < self.scroll_offset {
-            self.scroll_offset = self.selected;
-        } else if self.selected >= self.scroll_offset + visible_height {
-            self.scroll_offset = self.selected - visible_height + 1;
-        }
-    }
 }
 
 impl Default for FileBrowserPane {

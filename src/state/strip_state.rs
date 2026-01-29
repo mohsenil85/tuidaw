@@ -121,6 +121,7 @@ impl StripState {
         self.selected.and_then(|idx| self.strips.get(idx))
     }
 
+    #[allow(dead_code)]
     pub fn selected_strip_mut(&mut self) -> Option<&mut Strip> {
         self.selected.and_then(|idx| self.strips.get_mut(idx))
     }
@@ -186,6 +187,7 @@ impl StripState {
     }
 
     /// Collect mixer updates for all strips (strip_id, level, mute)
+    #[allow(dead_code)]
     pub fn collect_strip_updates(&self) -> Vec<(StripId, f32, bool)> {
         self.strips
             .iter()
@@ -265,6 +267,7 @@ impl StripState {
     }
 
     /// Strips that have tracks (for piano roll)
+    #[allow(dead_code)]
     pub fn strips_with_tracks(&self) -> Vec<&Strip> {
         self.strips.iter().filter(|s| s.has_track).collect()
     }

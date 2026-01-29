@@ -1001,6 +1001,123 @@ toggle keybinding)
 
 ---
 
+## 29. Click track and recording countdown
+
+**Status:** Not started — new feature
+
+**What this means:** A metronome that plays during playback/recording,
+plus a count-in (countdown) before recording begins. Both settings live
+in `SessionState` (part of `Frame`) and are editable in `FrameEditPane`.
+
+### SessionState additions
+
+```rust
+pub struct SessionState {
+    // ... existing fields ...
+    pub click_enabled: bool,       // metronome on/off
+    pub countdown_enabled: bool,   // count-in before recording
+    pub countdown_beats: u8,       // how many beats to count in (default: time_sig numerator = 1 bar)
+}
+```
+
+### Click track implementation
+
+**Sound:** A minimal percussive SuperCollider SynthDef — short sine
+burst with fast decay. Two pitches: high for beat 1 (downbeat), low for
+other beats. Something like:
+
+```supercollider
+SynthDef(\click, { |freq = 1000, amp = 0.5|
+    var sig = SinOsc.ar(freq) * EnvGen.kr(Env.perc(0.001, 0.05), doneAction: 2) * amp;
+    Out.ar(0, sig ! 2);
+}).add;
+```
+
+**Playback integration (`src/playback.rs`):** Inside `tick_playback()`,
+when `session.click_enabled` is true and `pr.playing` is true:
+
+1. Check if the tick range `[old_playhead, new_playhead)` crosses a beat
+   boundary: `tick % ticks_per_beat == 0`
+2. If so, determine if it's beat 1 of a bar:
+   `tick % (ticks_per_beat * time_sig.0) == 0`
+3. Fire the click synth via `audio_engine.play_click(is_downbeat, offset)`
+4. The click plays through the master bus (not through any strip)
+
+**AudioEngine addition:**
+
+```rust
+impl AudioEngine {
+    /// Play a click sound. `downbeat` controls pitch (high/low).
+    pub fn play_click(&self, downbeat: bool, offset_secs: f64) {
+        let freq = if downbeat { 1500.0 } else { 1000.0 };
+        // Send /s_new for the \click synthdef with scheduled offset
+    }
+}
+```
+
+### Recording countdown
+
+When the user presses record (or play-with-record) and
+`countdown_enabled` is true:
+
+1. **Enter countdown state:** `PianoRollState` gets a new field:
+   ```rust
+   pub countdown_remaining: Option<u32>,  // remaining countdown ticks (None = not counting)
+   ```
+2. **During countdown:**
+   - Playhead does NOT advance (or advances in a virtual pre-roll space)
+   - Click track plays the countdown beats
+   - A visual indicator shows remaining beats
+     (e.g., `"Recording in: 3... 2... 1..."` in the header or pane)
+   - No notes are recorded during countdown
+3. **When countdown reaches 0:**
+   - Clear the countdown state
+   - Start actual playback/recording from the current position
+   - The transition should be seamless (no audible gap between the last
+     countdown click and beat 1 of the actual music)
+
+**Pre-roll approach:** The countdown effectively inserts N beats of
+silence before the loop/play start point. The playhead can be modeled as
+starting at `start_tick - countdown_ticks` and only beginning to record
+once it crosses `start_tick`.
+
+### FrameEditPane additions
+
+Add two new fields to the field list:
+
+```rust
+enum Field {
+    // ... existing ...
+    Click,      // "Click Track: ON/OFF"
+    Countdown,  // "Count-in: ON/OFF (4 beats)"
+}
+```
+
+Both toggle with Left/Right arrows. Countdown field also allows
+adjusting the beat count (1-8 beats) when in text-edit mode.
+
+### Header display
+
+The Frame header bar (`src/ui/frame.rs:188-193`) should show click/countdown
+status. Compact indicators:
+
+```
+TUIDAW - default  Key: C  Scale: Major  BPM: 120  4/4  [Click ✓]  [Count-in: 4]
+```
+
+Or when disabled, omit or show dimmed.
+
+### Files
+
+- `src/ui/frame.rs` — `SessionState` fields, header rendering
+- `src/panes/frame_edit_pane.rs` — new editable fields
+- `src/playback.rs` — click firing logic, countdown tick management
+- `src/audio/engine.rs` — `play_click()` method, click SynthDef
+  boot/registration
+- `src/state/piano_roll.rs` — `countdown_remaining` field
+
+---
+
 ## Priority Order
 
 ### Bugs (fix first)
@@ -1028,13 +1145,14 @@ toggle keybinding)
 16. **Item 22** — Unit tests
 
 ### Features
-17. **Item 28** — Arrangement view (phase 1: read-only)
-18. **Item 2** — Global shortcuts: save as, open, export, import
-19. **Item 14** — Export/import effects, instruments
-20. **Item 16** — LFO modulation targets
-21. **Item 17** — Better UI/input primitives
-22. **Item 9** — Custom synths, VST support
-23. **Item 28** — Arrangement view (phases 2-3: waveforms, automation, editing)
+17. **Item 29** — Click track and recording countdown
+18. **Item 28** — Arrangement view (phase 1: read-only)
+19. **Item 2** — Global shortcuts: save as, open, export, import
+20. **Item 14** — Export/import effects, instruments
+21. **Item 16** — LFO modulation targets
+22. **Item 17** — Better UI/input primitives
+23. **Item 9** — Custom synths, VST support
+24. **Item 28** — Arrangement view (phases 2-3: waveforms, automation, editing)
 
 ### Long-term
 24. **Item 19** — UI themes

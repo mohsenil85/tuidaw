@@ -10,6 +10,7 @@ use super::bus_allocator::BusAllocator;
 use super::osc_client::OscClient;
 use crate::state::{AutomationTarget, BufferId, CustomSynthDefRegistry, EffectType, FilterType, OscType, ParamValue, StripId, StripState};
 
+#[allow(dead_code)]
 pub type ModuleId = u32;
 
 // SuperCollider group IDs for execution ordering
@@ -89,6 +90,7 @@ pub struct AudioEngine {
     /// Sample buffer mapping: BufferId -> SuperCollider buffer number
     buffer_map: HashMap<BufferId, i32>,
     /// Next available buffer number for SuperCollider
+    #[allow(dead_code)]
     next_bufnum: i32,
 }
 
@@ -129,6 +131,7 @@ impl AudioEngine {
         self.scsynth_process.is_some()
     }
 
+    #[allow(dead_code)]
     pub fn is_compiling(&self) -> bool {
         self.is_compiling
     }
@@ -1122,6 +1125,7 @@ impl AudioEngine {
 
     /// Load a sample file into a SuperCollider buffer
     /// Returns the SC buffer number on success
+    #[allow(dead_code)]
     pub fn load_sample(&mut self, buffer_id: BufferId, path: &str) -> Result<i32, String> {
         let client = self.client.as_ref().ok_or("Not connected")?;
 
@@ -1140,6 +1144,7 @@ impl AudioEngine {
     }
 
     /// Free a sample buffer from SuperCollider
+    #[allow(dead_code)]
     pub fn free_sample(&mut self, buffer_id: BufferId) -> Result<(), String> {
         let client = self.client.as_ref().ok_or("Not connected")?;
 
@@ -1150,11 +1155,13 @@ impl AudioEngine {
     }
 
     /// Get the SuperCollider buffer number for a loaded buffer
+    #[allow(dead_code)]
     pub fn get_sc_bufnum(&self, buffer_id: BufferId) -> Option<i32> {
         self.buffer_map.get(&buffer_id).copied()
     }
 
     /// Check if a buffer is loaded
+    #[allow(dead_code)]
     pub fn is_buffer_loaded(&self, buffer_id: BufferId) -> bool {
         self.buffer_map.contains_key(&buffer_id)
     }

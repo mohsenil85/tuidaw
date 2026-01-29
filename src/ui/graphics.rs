@@ -30,10 +30,12 @@ impl Rect {
         Self { x, y, width, height }
     }
 
+    #[allow(dead_code)]
     pub fn right(&self) -> u16 {
         self.x.saturating_add(self.width)
     }
 
+    #[allow(dead_code)]
     pub fn bottom(&self) -> u16 {
         self.y.saturating_add(self.height)
     }
@@ -64,6 +66,7 @@ pub trait Graphics {
     fn draw_box(&mut self, rect: Rect, title: Option<&str>);
 
     /// Fill a rectangle with a character
+    #[allow(dead_code)]
     fn fill_rect(&mut self, rect: Rect, ch: char);
 
     /// Get the current terminal size (width, height)

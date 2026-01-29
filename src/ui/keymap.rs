@@ -8,10 +8,13 @@ pub enum KeyPattern {
     /// Special key (arrows, function keys, etc.)
     Key(KeyCode),
     /// Ctrl + character
+    #[allow(dead_code)]
     Ctrl(char),
     /// Alt + character
+    #[allow(dead_code)]
     Alt(char),
     /// Ctrl + special key
+    #[allow(dead_code)]
     CtrlKey(KeyCode),
 }
 
@@ -111,6 +114,7 @@ impl Keymap {
     }
 
     /// Add a Ctrl+char binding
+    #[allow(dead_code)]
     pub fn bind_ctrl(mut self, ch: char, action: &'static str, description: &'static str) -> Self {
         self.bindings.push(KeyBinding {
             pattern: KeyPattern::Ctrl(ch),
@@ -121,6 +125,7 @@ impl Keymap {
     }
 
     /// Add an Alt+char binding
+    #[allow(dead_code)]
     pub fn bind_alt(mut self, ch: char, action: &'static str, description: &'static str) -> Self {
         self.bindings.push(KeyBinding {
             pattern: KeyPattern::Alt(ch),
@@ -131,6 +136,7 @@ impl Keymap {
     }
 
     /// Add a Ctrl+key binding
+    #[allow(dead_code)]
     pub fn bind_ctrl_key(
         mut self,
         key: KeyCode,

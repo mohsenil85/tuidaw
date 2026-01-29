@@ -75,12 +75,15 @@ unused value.
 
 ### ~~2.4 Global dead code suppression~~ FIXED
 
-Changed `#![allow(dead_code, unused_imports)]` to `#![allow(dead_code)]`
-only. Removed `unused_imports` suppression and cleaned up all unused
-imports across 10 files. `dead_code` is retained because much of the
-flagged code is intentional API surface (color constants, keymap bind
-variants, MIDI CC constants, sampler/automation methods) that isn't
-called yet but is part of the designed interface.
+Removed the global `#![allow(dead_code)]` from `main.rs`. Removed 4
+truly dead items (`piano_mode()`, `is_piano_mode()`, `selectable_count()`,
+`ensure_visible()`). Added module-level `#![allow(dead_code)]` to 7
+files that are entirely planned API (midi, automation, sampler,
+midi_recording, custom_synthdef, music, select_list). Added ~50
+targeted `#[allow(dead_code)]` annotations on intentional API surface
+across 15 files (audio engine buffer methods, keymap bind variants,
+color constants, action enum variants, pane accessors, etc.). Result:
+`cargo check` produces zero warnings.
 
 ### ~~2.5 Piano keyboard mapping duplicated 3 times~~ FIXED
 
@@ -91,24 +94,12 @@ all shared state (`active`, `octave`, `layout`) and methods
 `StripEditPane`) now hold a `PianoKeyboard` field and delegate to it.
 Removed ~200 lines of duplicated code.
 
-### 2.6 `PushPane`/`PopPane` actions defined but not implemented
+### ~~2.6 `PushPane`/`PopPane` actions defined but not implemented~~ FIXED
 
-**File:** `src/ui/pane.rs:17-20, 214-217`
-
-```rust
-// In Action enum:
-PushPane(&'static str),
-PopPane,
-
-// In PaneManager::handle_input():
-Action::PushPane(id) => {
-    self.switch_to(id);  // identical to SwitchPane
-}
-Action::PopPane => {}    // no-op
-```
-
-The modal stack concept was planned but never implemented. `PushPane`
-just switches (no stack push), `PopPane` does nothing.
+Implemented proper pane stack in `PaneManager` with `stack: Vec<usize>`.
+`push_to()` saves current index and switches; `pop()` restores from
+stack. Help pane and file browser now use push/pop for modal behavior.
+See item 14.
 
 ### ~~2.7 `SemanticColor` enum defined but never used~~ FIXED
 
@@ -261,88 +252,27 @@ Note: `as_any_mut()` is still on the Pane trait because
 configure target panes (e.g., setting strip data on `StripEditPane`
 before switching to it).
 
-### Proposed: Split the Action enum
+### ~~Proposed: Split the Action enum~~ DONE
 
-The current `Action` enum has 50+ variants mixing UI navigation with
-domain operations:
-
-```rust
-enum Action {
-    None,
-    Quit,
-    SwitchPane(&'static str),
-    PushPane(&'static str),
-    PopPane,
-    AddStrip(OscType),
-    DeleteStrip(StripId),
-    // ... 45 more variants
-}
-```
-
-Split into domain-specific sub-enums:
-
-```rust
-enum Action {
-    None,
-    Quit,
-    Nav(NavAction),
-    Strip(StripAction),
-    Mixer(MixerAction),
-    PianoRoll(PianoRollAction),
-    Server(ServerAction),
-    File(FileAction),
-    Session(SessionAction),
-}
-
-enum NavAction {
-    SwitchPane(&'static str),
-    PushPane(&'static str),
-    PopPane,
-}
-
-enum MixerAction {
-    Move(i8),
-    Jump(i8),
-    AdjustLevel(f32),
-    ToggleMute,
-    ToggleSolo,
-    CycleSection,
-    CycleOutput,
-    CycleOutputReverse,
-    AdjustSend(u8, f32),
-    ToggleSend(u8),
-}
-
-// etc.
-```
-
-Each pane only constructs actions from its own sub-enum. The dispatch
-module matches on the outer enum and delegates to focused handler
-functions.
+Split the flat 50+ variant `Action` enum into domain-specific sub-enums:
+`NavAction`, `StripAction`, `MixerAction`, `PianoRollAction`,
+`ServerAction`, `SessionAction`. The main `Action` enum now wraps these
+via `Action::Nav(NavAction::...)`, `Action::Strip(StripAction::...)`,
+etc. `dispatch.rs` restructured into domain dispatch functions
+(`dispatch_strip`, `dispatch_mixer`, etc.). All 11 pane files updated.
 
 ### ~~Proposed: Extract piano keyboard utility~~ DONE
 
 Created `src/ui/piano_keyboard.rs` with `PianoKeyboard` struct and
 `PianoLayout` enum. See item 2.5 for details.
 
-### Proposed: Implement proper pane stack
+### ~~Proposed: Implement proper pane stack~~ DONE
 
-Replace the current `PushPane`/`PopPane` no-ops with actual stack
-behavior in `PaneManager`:
-
-```rust
-struct PaneManager {
-    panes: Vec<Box<dyn Pane>>,
-    active_index: usize,
-    stack: Vec<usize>,  // stack of previous active indices
-}
-
-// PushPane: save current index, switch to new pane
-// PopPane: restore previous index from stack
-```
-
-This enables proper modal dialogs (help overlay, file browser,
-confirmations) that return to the previous context.
+Added `stack: Vec<usize>` to `PaneManager`. `push_to()` saves current
+`active_index` onto the stack and switches; `pop()` restores from the
+stack with proper `on_exit`/`on_enter` lifecycle calls. `switch_to()`
+clears the stack (clean navigation resets modal state). Help pane (`?`
+key) and file browser now use push/pop. See item 2.6.
 
 ### Proposed: Drum Sequencer
 
@@ -440,13 +370,19 @@ Old school hip hop machine vibes — MPC/SP-1200 workflow in the terminal.
     engine; works for persistent and per-voice source nodes (bug 1.4
     fixed)
 
-### Longer-term (cleanup)
+### ~~Longer-term (cleanup)~~ MOSTLY DONE
 
-13. **Split Action enum** into sub-enums
-14. **Implement pane stack** for proper modals (relates to 2.6)
-15. ~~**Remove `#![allow(dead_code)]`**~~ -- partially done; removed
-    `unused_imports` suppression and cleaned up all unused imports;
-    `dead_code` retained for API surface code
+13. ~~**Split Action enum** into sub-enums~~ -- done; 6 domain
+    sub-enums (`NavAction`, `StripAction`, `MixerAction`,
+    `PianoRollAction`, `ServerAction`, `SessionAction`); dispatch
+    restructured into domain functions
+14. ~~**Implement pane stack** for proper modals (relates to 2.6)~~ --
+    done; `stack: Vec<usize>` in `PaneManager`; help pane and file
+    browser converted to push/pop
+15. ~~**Remove `#![allow(dead_code)]`**~~ -- done; removed global
+    suppression from `main.rs`; 4 dead items removed; ~50 targeted
+    `#[allow(dead_code)]` annotations on intentional API surface;
+    7 planned-API modules given module-level allows; zero warnings
 16. ~~**Update CLAUDE.md**~~ -- done; complete rewrite of CLAUDE.md,
     architecture.md, and ai-coding-affordances.md
 17. ~~**Remove unused `SemanticColor`**, `Keymap::merge()`~~ -- done;

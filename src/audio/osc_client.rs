@@ -136,6 +136,7 @@ impl OscClient {
     }
 
     /// /s_new synthdef node_id add_action target [param value ...]
+    #[allow(dead_code)]
     pub fn create_synth(&self, synth_def: &str, node_id: i32, params: &[(String, f32)]) -> std::io::Result<()> {
         let mut args: Vec<OscType> = vec![
             OscType::String(synth_def.to_string()),
@@ -213,6 +214,7 @@ impl OscClient {
 
     /// /b_allocRead bufnum path startFrame numFrames
     /// Load a sound file into a buffer (SuperCollider reads the file)
+    #[allow(dead_code)]
     pub fn load_buffer(&self, bufnum: i32, path: &str) -> std::io::Result<()> {
         self.send_message("/b_allocRead", vec![
             OscType::Int(bufnum),
@@ -224,6 +226,7 @@ impl OscClient {
 
     /// /b_alloc bufnum numFrames numChannels
     /// Allocate an empty buffer
+    #[allow(dead_code)]
     pub fn alloc_buffer(&self, bufnum: i32, num_frames: i32, num_channels: i32) -> std::io::Result<()> {
         self.send_message("/b_alloc", vec![
             OscType::Int(bufnum),
@@ -240,6 +243,7 @@ impl OscClient {
 
     /// /b_query bufnum
     /// Query buffer info (results come back asynchronously via /b_info)
+    #[allow(dead_code)]
     pub fn query_buffer(&self, bufnum: i32) -> std::io::Result<()> {
         self.send_message("/b_query", vec![OscType::Int(bufnum)])
     }
@@ -260,6 +264,7 @@ pub fn osc_time_from_now(offset_secs: f64) -> OscTime {
 }
 
 /// Immediate timetag (0,1) — execute as soon as received
+#[allow(dead_code)]
 pub fn osc_time_immediate() -> OscTime {
     OscTime { seconds: 0, fractional: 1 }
 }

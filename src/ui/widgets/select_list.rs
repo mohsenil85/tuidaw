@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::ui::{Color, Graphics, InputEvent, KeyCode, Style};
 
 /// An item in a select list

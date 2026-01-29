@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use std::sync::mpsc::{self, Receiver, Sender};
 use midir::{MidiInput, MidiInputConnection};
 

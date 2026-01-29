@@ -155,6 +155,7 @@ impl OscType {
     }
 
     /// Get default params with custom synthdef lookup
+    #[allow(dead_code)]
     pub fn default_params_with_registry(&self, registry: &CustomSynthDefRegistry) -> Vec<Param> {
         match self {
             OscType::Custom(id) => registry
@@ -183,10 +184,12 @@ impl OscType {
         matches!(self, OscType::Sampler)
     }
 
+    #[allow(dead_code)]
     pub fn is_custom(&self) -> bool {
         matches!(self, OscType::Custom(_))
     }
 
+    #[allow(dead_code)]
     pub fn custom_id(&self) -> Option<CustomSynthDefId> {
         match self {
             OscType::Custom(id) => Some(*id),
@@ -200,6 +203,7 @@ impl OscType {
     }
 
     /// All oscillator types including custom ones from registry
+    #[allow(dead_code)]
     pub fn all_with_custom(registry: &CustomSynthDefRegistry) -> Vec<OscType> {
         let mut types = Self::all();
         for synthdef in &registry.synthdefs {
@@ -233,6 +237,7 @@ impl FilterType {
         }
     }
 
+    #[allow(dead_code)]
     pub fn all() -> Vec<FilterType> {
         vec![FilterType::Lpf, FilterType::Hpf, FilterType::Bpf]
     }
@@ -282,6 +287,7 @@ impl EffectType {
         }
     }
 
+    #[allow(dead_code)]
     pub fn all() -> Vec<EffectType> {
         vec![EffectType::Delay, EffectType::Reverb, EffectType::Gate]
     }
@@ -391,6 +397,7 @@ impl LfoShape {
         }
     }
 
+    #[allow(dead_code)]
     pub fn all() -> Vec<LfoShape> {
         vec![LfoShape::Sine, LfoShape::Square, LfoShape::Saw, LfoShape::Triangle]
     }
@@ -465,6 +472,7 @@ impl LfoTarget {
         }
     }
 
+    #[allow(dead_code)]
     pub fn all() -> Vec<LfoTarget> {
         vec![
             LfoTarget::FilterCutoff,

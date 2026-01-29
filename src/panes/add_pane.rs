@@ -81,14 +81,6 @@ impl AddPane {
         }
     }
 
-    /// Get selectable count (excluding separators)
-    fn selectable_count(&self) -> usize {
-        self.cached_options
-            .iter()
-            .filter(|o| !matches!(o, AddOption::Separator(_)))
-            .count()
-    }
-
     /// Move to next selectable item
     fn select_next(&mut self) {
         let len = self.cached_options.len();

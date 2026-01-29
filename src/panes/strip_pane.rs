@@ -69,12 +69,6 @@ impl Default for StripPane {
     }
 }
 
-impl StripPane {
-    pub fn piano_mode(&self) -> bool {
-        self.piano.is_active()
-    }
-}
-
 impl Pane for StripPane {
     fn id(&self) -> &'static str {
         "strip"

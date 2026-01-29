@@ -161,6 +161,7 @@ impl Frame {
     }
 
     /// Calculate the inner rect where pane content should render
+    #[allow(dead_code)]
     pub fn inner_rect(width: u16, height: u16) -> Rect {
         // Inset: 1 left, 1 right, 1 top (border+header), CONSOLE_LINES+2 bottom (separator+console+border)
         let inner_x = 1;

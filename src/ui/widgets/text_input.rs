@@ -25,11 +25,13 @@ impl TextInput {
         }
     }
 
+    #[allow(dead_code)]
     pub fn with_placeholder(mut self, placeholder: &str) -> Self {
         self.placeholder = placeholder.to_string();
         self
     }
 
+    #[allow(dead_code)]
     pub fn with_value(mut self, value: &str) -> Self {
         self.value = value.to_string();
         self.cursor = self.value.len();
@@ -49,6 +51,7 @@ impl TextInput {
         self.focused = focused;
     }
 
+    #[allow(dead_code)]
     pub fn is_focused(&self) -> bool {
         self.focused
     }

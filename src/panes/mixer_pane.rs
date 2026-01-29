@@ -101,6 +101,7 @@ impl MixerPane {
         }
     }
 
+    #[allow(dead_code)]
     pub fn send_target(&self) -> Option<u8> {
         self.send_target
     }

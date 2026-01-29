@@ -30,6 +30,7 @@ pub struct Modifiers {
 }
 
 impl Modifiers {
+    #[allow(dead_code)]
     pub const fn none() -> Self {
         Self {
             ctrl: false,
@@ -38,6 +39,7 @@ impl Modifiers {
         }
     }
 
+    #[allow(dead_code)]
     pub const fn ctrl() -> Self {
         Self {
             ctrl: true,
@@ -59,6 +61,7 @@ impl InputEvent {
         Self { key, modifiers }
     }
 
+    #[allow(dead_code)]
     pub const fn key(key: KeyCode) -> Self {
         Self {
             key,
@@ -67,6 +70,7 @@ impl InputEvent {
     }
 
     /// Check if this is a specific character without modifiers
+    #[allow(dead_code)]
     pub fn is_char(&self, ch: char) -> bool {
         matches!(self.key, KeyCode::Char(c) if c == ch)
             && !self.modifiers.ctrl
