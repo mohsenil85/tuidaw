@@ -605,7 +605,6 @@ impl AudioEngine {
         pitch: u8,
         velocity: f32,
         offset_secs: f64,
-        _polyphonic: bool,
         state: &StripState,
     ) -> Result<(), String> {
         let strip = state.strip(strip_id)
@@ -1101,15 +1100,14 @@ impl AudioEngine {
                 }
             }
             AutomationTarget::FilterCutoff(strip_id) => {
-                // Find filter node (second node in chain if it exists)
                 if let Some(nodes) = self.node_map.get(strip_id) {
-                    // Filter is typically the first processing node
-                    // Skip source nodes (if AudioIn) and look for filter
                     let strip = state.strip(*strip_id);
                     if let Some(strip) = strip {
                         if strip.filter.is_some() {
-                            // Filter node follows source (which might be AudioIn)
-                            let filter_idx = if strip.source.is_audio_input() { 1 } else { 0 };
+                            let mut filter_idx = if strip.source.is_audio_input() { 1 } else { 0 };
+                            if strip.lfo.enabled {
+                                filter_idx += 1;
+                            }
                             if let Some(&filter_node) = nodes.get(filter_idx) {
                                 client.set_param(filter_node, "cutoff", value)
                                     .map_err(|e| e.to_string())?;
@@ -1123,9 +1121,12 @@ impl AudioEngine {
                     let strip = state.strip(*strip_id);
                     if let Some(strip) = strip {
                         if strip.filter.is_some() {
-                            let filter_idx = if strip.source.is_audio_input() { 1 } else { 0 };
+                            let mut filter_idx = if strip.source.is_audio_input() { 1 } else { 0 };
+                            if strip.lfo.enabled {
+                                filter_idx += 1;
+                            }
                             if let Some(&filter_node) = nodes.get(filter_idx) {
-                                client.set_param(filter_node, "res", value)
+                                client.set_param(filter_node, "resonance", value)
                                     .map_err(|e| e.to_string())?;
                             }
                         }
@@ -1138,6 +1139,9 @@ impl AudioEngine {
                     if let Some(strip) = strip {
                         // Calculate the effect node index
                         let mut node_idx = if strip.source.is_audio_input() { 1 } else { 0 };
+                        if strip.lfo.enabled {
+                            node_idx += 1;
+                        }
                         if strip.filter.is_some() {
                             node_idx += 1;
                         }
@@ -1180,10 +1184,6 @@ impl AudioEngine {
         Ok(())
     }
 
-    // Keep old method signature as alias for backward compat during transition
-    pub fn rebuild_routing(&mut self, _state: &StripState) -> Result<(), String> {
-        self.rebuild_strip_routing(_state)
-    }
 }
 
 impl Drop for AudioEngine {

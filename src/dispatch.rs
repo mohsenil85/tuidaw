@@ -555,8 +555,8 @@ pub fn dispatch_action(
         Action::PianoRollPlayNote(pitch, velocity) => {
             let pitch = *pitch;
             let velocity = *velocity;
-            // Get the current track's strip_id and polyphonic mode
-            let track_info: Option<(u32, bool)> = {
+            // Get the current track's strip_id
+            let track_strip_id: Option<u32> = {
                 let track_idx = panes
                     .get_pane_mut::<PianoRollPane>("piano_roll")
                     .map(|pr| pr.current_track());
@@ -564,13 +564,13 @@ pub fn dispatch_action(
                     panes
                         .get_pane_mut::<StripPane>("strip")
                         .and_then(|sp| sp.state().piano_roll.track_at(idx))
-                        .map(|t| (t.module_id, t.polyphonic))
+                        .map(|t| t.module_id)
                 } else {
                     None
                 }
             };
 
-            if let Some((strip_id, polyphonic)) = track_info {
+            if let Some(strip_id) = track_strip_id {
                 if audio_engine.is_running() {
                     // Spawn voice
                     let vel_f = velocity as f32 / 127.0;
@@ -578,7 +578,7 @@ pub fn dispatch_action(
                         .get_pane_mut::<StripPane>("strip")
                         .map(|sp| sp.state().clone());
                     if let Some(state) = state {
-                        let _ = audio_engine.spawn_voice(strip_id, pitch, vel_f, 0.0, polyphonic, &state);
+                        let _ = audio_engine.spawn_voice(strip_id, pitch, vel_f, 0.0, &state);
                         let duration_ticks = 240; // Half beat for staccato feel
                         active_notes.push((strip_id, pitch, duration_ticks));
                     }
@@ -600,19 +600,19 @@ pub fn dispatch_action(
         Action::StripPlayNote(pitch, velocity) => {
             let pitch = *pitch;
             let velocity = *velocity;
-            // Get the selected strip's id and polyphonic mode
-            let strip_info: Option<(u32, bool)> = panes
+            // Get the selected strip's id
+            let strip_info: Option<u32> = panes
                 .get_pane_mut::<StripPane>("strip")
-                .and_then(|sp| sp.state().selected_strip().map(|s| (s.id, s.polyphonic)));
+                .and_then(|sp| sp.state().selected_strip().map(|s| s.id));
 
-            if let Some((strip_id, polyphonic)) = strip_info {
+            if let Some(strip_id) = strip_info {
                 if audio_engine.is_running() {
                     let vel_f = velocity as f32 / 127.0;
                     let state = panes
                         .get_pane_mut::<StripPane>("strip")
                         .map(|sp| sp.state().clone());
                     if let Some(state) = state {
-                        let _ = audio_engine.spawn_voice(strip_id, pitch, vel_f, 0.0, polyphonic, &state);
+                        let _ = audio_engine.spawn_voice(strip_id, pitch, vel_f, 0.0, &state);
                         let duration_ticks = 240;
                         active_notes.push((strip_id, pitch, duration_ticks));
                     }
