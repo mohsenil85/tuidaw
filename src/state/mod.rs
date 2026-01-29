@@ -1,4 +1,5 @@
 pub mod automation;
+pub mod custom_synthdef;
 pub mod midi_recording;
 pub mod music;
 pub mod param;
@@ -9,6 +10,7 @@ pub mod strip;
 pub mod strip_state;
 
 pub use automation::{AutomationLane, AutomationLaneId, AutomationPoint, AutomationState, AutomationTarget, CurveType};
+pub use custom_synthdef::{CustomSynthDef, CustomSynthDefId, CustomSynthDefRegistry, ParamSpec};
 pub use midi_recording::{MidiCcMapping, MidiRecordingState, PitchBendConfig, RecordMode};
 pub use param::{Param, ParamValue};
 pub use piano_roll::PianoRollState;

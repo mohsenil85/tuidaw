@@ -8,7 +8,7 @@ use std::time::Duration;
 
 use super::bus_allocator::BusAllocator;
 use super::osc_client::OscClient;
-use crate::state::{AutomationTarget, BufferId, EffectType, FilterType, OscType, Param, ParamValue, StripId, StripState};
+use crate::state::{AutomationTarget, BufferId, CustomSynthDefRegistry, EffectType, FilterType, OscType, Param, ParamValue, StripId, StripState};
 
 pub type ModuleId = u32;
 
@@ -306,8 +306,8 @@ impl AudioEngine {
         Ok(())
     }
 
-    fn osc_synth_def(osc: OscType) -> &'static str {
-        osc.synth_def_name()
+    fn osc_synth_def(osc: OscType, registry: &CustomSynthDefRegistry) -> String {
+        osc.synth_def_name_with_registry(registry)
     }
 
     fn filter_synth_def(ft: FilterType) -> &'static str {
@@ -692,7 +692,7 @@ impl AudioEngine {
         self.next_node_id += 1;
         {
             let mut args: Vec<rosc::OscType> = vec![
-                rosc::OscType::String(Self::osc_synth_def(strip.source).to_string()),
+                rosc::OscType::String(Self::osc_synth_def(strip.source, &state.custom_synthdefs)),
                 rosc::OscType::Int(osc_node_id),
                 rosc::OscType::Int(1),
                 rosc::OscType::Int(group_id),
@@ -1006,6 +1006,19 @@ impl AudioEngine {
                     .send_message("/d_recv", vec![rosc::OscType::Blob(data)])
                     .map_err(|e| e.to_string())?;
             }
+        }
+        Ok(())
+    }
+
+    /// Load a single .scsyndef file into the server
+    pub fn load_synthdef_file(&self, path: &Path) -> Result<(), String> {
+        let client = self.client.as_ref().ok_or("Not connected")?;
+
+        if path.extension().map_or(false, |e| e == "scsyndef") {
+            let data = fs::read(path).map_err(|e| e.to_string())?;
+            client
+                .send_message("/d_recv", vec![rosc::OscType::Blob(data)])
+                .map_err(|e| e.to_string())?;
         }
         Ok(())
     }

@@ -1,4 +1,5 @@
 use std::any::Any;
+use std::path::PathBuf;
 
 use super::{Graphics, InputEvent, Keymap};
 use super::frame::SessionState;
@@ -105,10 +106,22 @@ pub enum Action {
     PianoRollTogglePolyMode,
     /// Piano roll: play a note immediately from keyboard (pitch, velocity)
     PianoRollPlayNote(u8, u8),
+    /// Piano roll: toggle play+record from piano mode
+    PianoRollPlayStopRecord,
     /// Strip: play a note on the selected strip (pitch, velocity)
     StripPlayNote(u8, u8),
     /// Update session state (from frame edit pane)
     UpdateSession(SessionState),
+    /// Open file browser for custom synthdef import
+    OpenFileBrowser(FileSelectAction),
+    /// Import a custom synthdef from a .scd file
+    ImportCustomSynthDef(PathBuf),
+}
+
+/// Action to take when a file is selected in the file browser
+#[derive(Debug, Clone, PartialEq)]
+pub enum FileSelectAction {
+    ImportCustomSynthDef,
 }
 
 /// Trait for UI panes (screens/views).

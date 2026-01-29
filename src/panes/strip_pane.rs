@@ -11,6 +11,7 @@ fn osc_color(osc: OscType) -> Color {
         OscType::Tri => Color::OSC_COLOR,
         OscType::AudioIn => Color::AUDIO_IN_COLOR,
         OscType::Sampler => Color::SAMPLER_COLOR,
+        OscType::Custom(_) => Color::CUSTOM_COLOR,
     }
 }
 

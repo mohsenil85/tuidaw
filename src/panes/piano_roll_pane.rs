@@ -44,6 +44,7 @@ pub struct PianoRollPane {
     piano_mode: bool,       // When true, letter keys play notes
     piano_octave: i8,       // Current octave for keyboard input (default 4 = C4)
     piano_layout: PianoLayout, // C or A starting layout
+    recording: bool,            // True when recording notes from piano keyboard
 }
 
 impl PianoRollPane {
@@ -83,6 +84,7 @@ impl PianoRollPane {
             piano_mode: false,
             piano_octave: 4, // C4 = MIDI 60
             piano_layout: PianoLayout::C,
+            recording: false,
         }
     }
 
@@ -168,6 +170,9 @@ impl PianoRollPane {
     pub fn default_duration(&self) -> u32 { self.default_duration }
     pub fn default_velocity(&self) -> u8 { self.default_velocity }
     pub fn current_track(&self) -> usize { self.current_track }
+    pub fn is_piano_mode(&self) -> bool { self.piano_mode }
+    pub fn is_recording(&self) -> bool { self.recording }
+    pub fn set_recording(&mut self, recording: bool) { self.recording = recording; }
 
     pub fn adjust_default_duration(&mut self, delta: i32) {
         let new_dur = (self.default_duration as i32 + delta).max(self.ticks_per_cell() as i32);
@@ -539,14 +544,23 @@ impl PianoRollPane {
 
         // Piano mode indicator on right side of status line
         if self.piano_mode {
-            g.set_style(Style::new().fg(Color::BLACK).bg(Color::PINK));
             let layout_char = match self.piano_layout {
                 PianoLayout::C => 'C',
                 PianoLayout::A => 'A',
             };
             let piano_str = format!(" PIANO {}{} ", layout_char, self.piano_octave);
-            let piano_x = rect.x + rect.width - piano_str.len() as u16 - 1;
-            g.put_str(piano_x, status_y, &piano_str);
+            let mut indicator_x = rect.x + rect.width - piano_str.len() as u16 - 1;
+
+            if self.recording {
+                let rec_str = " REC ";
+                indicator_x -= rec_str.len() as u16;
+                g.set_style(Style::new().fg(Color::WHITE).bg(Color::RED));
+                g.put_str(indicator_x, status_y, rec_str);
+                indicator_x += rec_str.len() as u16;
+            }
+
+            g.set_style(Style::new().fg(Color::BLACK).bg(Color::PINK));
+            g.put_str(indicator_x, status_y, &piano_str);
         } else {
             g.set_style(Style::new().fg(Color::GRAY));
             let hint_str = "Tab=piano";
@@ -602,7 +616,7 @@ impl Pane for PianoRollPane {
                     }
                     return Action::None;
                 }
-                KeyCode::Char(' ') => return Action::PianoRollPlayStop,
+                KeyCode::Char(' ') => return Action::PianoRollPlayStopRecord,
                 KeyCode::Char(c) => {
                     // Piano keys: map character to MIDI pitch
                     if let Some(pitch) = self.key_to_pitch(c) {

@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 
+use super::custom_synthdef::{CustomSynthDefId, CustomSynthDefRegistry};
 use super::param::{Param, ParamValue};
 use super::sampler::SamplerConfig;
 
@@ -13,6 +14,7 @@ pub enum OscType {
     Tri,
     AudioIn,
     Sampler,
+    Custom(CustomSynthDefId),
 }
 
 impl OscType {
@@ -24,6 +26,18 @@ impl OscType {
             OscType::Tri => "Triangle",
             OscType::AudioIn => "Audio In",
             OscType::Sampler => "Sampler",
+            OscType::Custom(_) => "Custom",
+        }
+    }
+
+    /// Get display name, with custom synthdef name lookup
+    pub fn display_name(&self, registry: &CustomSynthDefRegistry) -> String {
+        match self {
+            OscType::Custom(id) => registry
+                .get(*id)
+                .map(|s| s.name.clone())
+                .unwrap_or_else(|| "Custom".to_string()),
+            _ => self.name().to_string(),
         }
     }
 
@@ -35,9 +49,22 @@ impl OscType {
             OscType::Tri => "tri",
             OscType::AudioIn => "audio_in",
             OscType::Sampler => "sampler",
+            OscType::Custom(_) => "custom",
         }
     }
 
+    /// Get short name with custom synthdef lookup
+    pub fn short_name_with_registry(&self, registry: &CustomSynthDefRegistry) -> String {
+        match self {
+            OscType::Custom(id) => registry
+                .get(*id)
+                .map(|s| s.synthdef_name.clone())
+                .unwrap_or_else(|| "custom".to_string()),
+            _ => self.short_name().to_string(),
+        }
+    }
+
+    /// Get the SuperCollider synthdef name (static for built-ins)
     pub fn synth_def_name(&self) -> &'static str {
         match self {
             OscType::Saw => "tuidaw_saw",
@@ -46,6 +73,18 @@ impl OscType {
             OscType::Tri => "tuidaw_tri",
             OscType::AudioIn => "tuidaw_audio_in",
             OscType::Sampler => "tuidaw_sampler",
+            OscType::Custom(_) => "tuidaw_saw", // Fallback, use synth_def_name_with_registry instead
+        }
+    }
+
+    /// Get the SuperCollider synthdef name with custom synthdef lookup
+    pub fn synth_def_name_with_registry(&self, registry: &CustomSynthDefRegistry) -> String {
+        match self {
+            OscType::Custom(id) => registry
+                .get(*id)
+                .map(|s| s.synthdef_name.clone())
+                .unwrap_or_else(|| "tuidaw_saw".to_string()),
+            _ => self.synth_def_name().to_string(),
         }
     }
 
@@ -97,6 +136,7 @@ impl OscType {
                     max: 1.0,
                 },
             ],
+            OscType::Custom(_) => vec![], // Use default_params_with_registry instead
             _ => vec![
                 Param {
                     name: "freq".to_string(),
@@ -114,6 +154,27 @@ impl OscType {
         }
     }
 
+    /// Get default params with custom synthdef lookup
+    pub fn default_params_with_registry(&self, registry: &CustomSynthDefRegistry) -> Vec<Param> {
+        match self {
+            OscType::Custom(id) => registry
+                .get(*id)
+                .map(|s| {
+                    s.params
+                        .iter()
+                        .map(|p| Param {
+                            name: p.name.clone(),
+                            value: ParamValue::Float(p.default),
+                            min: p.min,
+                            max: p.max,
+                        })
+                        .collect()
+                })
+                .unwrap_or_default(),
+            _ => self.default_params(),
+        }
+    }
+
     pub fn is_audio_input(&self) -> bool {
         matches!(self, OscType::AudioIn)
     }
@@ -122,8 +183,29 @@ impl OscType {
         matches!(self, OscType::Sampler)
     }
 
+    pub fn is_custom(&self) -> bool {
+        matches!(self, OscType::Custom(_))
+    }
+
+    pub fn custom_id(&self) -> Option<CustomSynthDefId> {
+        match self {
+            OscType::Custom(id) => Some(*id),
+            _ => None,
+        }
+    }
+
+    /// Built-in oscillator types (excluding custom)
     pub fn all() -> Vec<OscType> {
         vec![OscType::Saw, OscType::Sin, OscType::Sqr, OscType::Tri, OscType::AudioIn, OscType::Sampler]
+    }
+
+    /// All oscillator types including custom ones from registry
+    pub fn all_with_custom(registry: &CustomSynthDefRegistry) -> Vec<OscType> {
+        let mut types = Self::all();
+        for synthdef in &registry.synthdefs {
+            types.push(OscType::Custom(synthdef.id));
+        }
+        types
     }
 }
 

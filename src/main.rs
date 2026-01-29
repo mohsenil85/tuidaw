@@ -6,6 +6,7 @@ mod dispatch;
 mod midi;
 mod panes;
 mod playback;
+mod scd_parser;
 mod setup;
 mod state;
 mod ui;
@@ -13,7 +14,7 @@ mod ui;
 use std::time::{Duration, Instant};
 
 use audio::AudioEngine;
-use panes::{AddPane, FrameEditPane, HelpPane, HomePane, MixerPane, PianoRollPane, SequencerPane, ServerPane, StripEditPane, StripPane};
+use panes::{AddPane, FileBrowserPane, FrameEditPane, HelpPane, HomePane, MixerPane, PianoRollPane, SequencerPane, ServerPane, StripEditPane, StripPane};
 use ui::{
     Action, Frame, InputSource, KeyCode, PaneManager, RatatuiBackend, ViewState,
 };
@@ -39,6 +40,7 @@ fn run(backend: &mut RatatuiBackend) -> std::io::Result<()> {
     panes.add_pane(Box::new(PianoRollPane::new()));
     panes.add_pane(Box::new(SequencerPane::new()));
     panes.add_pane(Box::new(FrameEditPane::new()));
+    panes.add_pane(Box::new(FileBrowserPane::new()));
 
     let mut audio_engine = AudioEngine::new();
     let mut app_frame = Frame::new();
@@ -217,6 +219,19 @@ fn run(backend: &mut RatatuiBackend) -> std::io::Result<()> {
                 if let Some(mixer_pane) = panes.get_pane_mut::<MixerPane>("mixer") {
                     mixer_pane.render_with_state(&mut frame, &state);
                 }
+            }
+        } else if active_id == "add" {
+            // Get custom synthdef registry for add pane
+            let registry = panes
+                .get_pane_mut::<StripPane>("strip")
+                .map(|sp| sp.state().custom_synthdefs.clone());
+            if let Some(reg) = registry {
+                if let Some(add_pane) = panes.get_pane_mut::<AddPane>("add") {
+                    add_pane.update_options(&reg);
+                    add_pane.render_with_registry(&mut frame, &reg);
+                }
+            } else {
+                panes.render(&mut frame);
             }
         } else if active_id == "piano_roll" {
             // Get state and current track info for piano roll rendering

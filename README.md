@@ -1,127 +1,176 @@
-# TUI DAW
+# tuidaw
 
-Terminal-based Digital Audio Workstation written in Rust.
+A terminal-based Digital Audio Workstation built in Rust. Wire up oscillators, filters, and effects in a modular rack, sequence notes in a piano roll, and mix it all down — without leaving the terminal.
+
+Uses [ratatui](https://github.com/ratatui/ratatui) for the TUI and [SuperCollider](https://supercollider.github.io/) (scsynth) for real-time audio synthesis via OSC.
 
 ## Features
 
-- Modular synthesizer rack in the terminal
-- Module types: Oscillators, Filters, Envelopes, LFO, Effects, Output
-- Signal routing with connections between module ports
-- Parameter editing with visual sliders
-- SQLite-based persistence
+- **Modular rack** — Add oscillators, filters, LFOs, effects, and output modules. Connect them with a visual signal routing system.
+- **Piano roll** — Place and edit notes with per-note velocity. BPM-based timing at 480 ticks/beat resolution with loop support.
+- **Mixer** — Channel strips with level, pan, mute, and solo. Output modules auto-assign to mixer channels.
+- **Real-time synthesis** — All audio runs through SuperCollider. OSC bundles with NTP timetags for sample-accurate scheduling.
+- **Custom SynthDefs** — Import your own `.scd` instruments. Parameters are auto-discovered and editable in the rack.
+- **Persistence** — Sessions saved as SQLite databases (`.tuidaw` files). Modules, parameters, connections all preserved.
+- **Keyboard-driven** — Every action is a keypress. No mouse needed. Vim-style navigation throughout.
 
 ## Prerequisites
 
-- Rust 1.70 or later
-- Cargo
+- **Rust** 1.70+
+- **SuperCollider** — [Install scsynth](https://supercollider.github.io/downloads). The server (`scsynth`) must be available on your PATH.
 
-## Build
+## Build & Run
 
 ```bash
 cargo build --release
-```
-
-## Run
-
-```bash
-cargo run
+cargo run --release
 ```
 
 ## Module Types
 
-| Category | Type | Ports |
-|----------|------|-------|
-| Oscillators | Saw, Sine, Square, Triangle | `out` (audio) |
-| Filters | Low-Pass, High-Pass, Band-Pass | `in` (audio), `out` (audio), `cutoff_mod` (control) |
-| Envelopes | ADSR | `gate` (gate), `out` (control) |
-| Modulation | LFO | `out` (control) |
-| Effects | Delay, Reverb | `in` (audio), `out` (audio) |
-| Output | Output | `in` (audio) |
+| Category    | Modules                          | Description                              |
+|-------------|----------------------------------|------------------------------------------|
+| Sources     | Saw, Sine, Square, Triangle      | Classic waveform oscillators             |
+| Sources     | MIDI                             | Pitched instrument, driven by piano roll |
+| Sources     | Sampler                          | Trigger audio samples                    |
+| Filters     | Low-Pass Filter                  | Subtractive filtering with cutoff mod    |
+| Modulation  | LFO                              | Low-frequency oscillator for modulation  |
+| Effects     | Delay                            | Time-based echo effect                   |
+| Output      | Output                           | Routes audio to mixer channel + hardware |
+
+## Signal Routing
+
+Modules communicate through audio and control buses. Connect an output port to an input port to route signal between modules. Multiple writers to the same bus are summed automatically.
+
+```
+  ┌──────────┐        ┌──────────┐        ┌──────────┐
+  │  Saw Osc │──out──>│──in  LPF │──out──>│──in  Out │
+  └──────────┘        └──────────┘        └──────────┘
+                           ^
+  ┌──────────┐             │
+  │   LFO    │──out──>cutoff_mod
+  └──────────┘
+```
+
+Execution order is determined by topological sort — sources run first, then processing, then outputs.
 
 ## Keybindings
 
-### Rack View (Normal Mode)
+### Global
 
-| Key | Action |
-|-----|--------|
-| `j` / `k` / Arrow keys | Navigate modules |
-| `g` / `G` | Go to top / bottom |
-| `a` | Add module |
-| `d` | Delete selected module |
-| `e` | Edit module parameters |
-| `c` | Enter connect mode |
-| `x` | Disconnect (remove connection from selected module) |
-| `w` | Save rack |
-| `o` | Load rack |
-| `q` | Quit |
+| Key       | Action              |
+|-----------|---------------------|
+| `Ctrl-q`  | Quit                |
+| `Ctrl-s`  | Save session        |
+| `Ctrl-l`  | Load session        |
+| `1`-`9`   | Switch pane         |
+| `.`       | Master mute toggle  |
+| `?`       | Help                |
+
+### Rack
+
+| Key            | Action                    |
+|----------------|---------------------------|
+| `j` / `k`      | Navigate modules          |
+| `a`            | Add module                |
+| `d`            | Delete module             |
+| `e`            | Edit parameters           |
+| `c`            | Connect mode              |
+| `x`            | Disconnect                |
 
 ### Connect Mode
 
-| Key | Action |
-|-----|--------|
-| `j` / `k` | Navigate modules |
-| `Tab` / `h` / `l` | Cycle through ports on selected module |
-| `Enter` | Confirm port selection |
-| `Esc` | Cancel and return to normal mode |
-
-Connection workflow:
-1. Press `c` to enter connect mode
-2. Navigate to source module and select output port
-3. Press `Enter` to confirm source
-4. Navigate to destination module and select input port
-5. Press `Enter` to create connection
+| Key            | Action                    |
+|----------------|---------------------------|
+| `j` / `k`      | Navigate modules          |
+| `Tab` / `h` / `l` | Cycle ports           |
+| `Enter`        | Confirm selection         |
+| `Esc`          | Cancel                    |
 
 ### Edit Mode
 
-| Key | Action |
-|-----|--------|
-| `j` / `k` | Navigate parameters |
-| `h` / `l` | Decrease / increase value |
-| `Esc` | Save and return to rack |
+| Key            | Action                    |
+|----------------|---------------------------|
+| `j` / `k`      | Navigate parameters       |
+| `h` / `l`      | Decrease / increase value |
+| `Esc`          | Return to rack            |
 
-## Persistence
-
-Racks are saved to `~/.config/tuidaw/rack.tuidaw` (SQLite format).
-
-The save file includes:
-- All modules with their parameters
-- All connections between modules
-- Module ordering
-
-## Example Signal Chain
-
-```
-Saw Oscillator (saw-0)
-    out ────────────────> in
-                    Low-Pass Filter (lpf-1)
-                        out ────────> in
-                                  Output (out-2)
-
-LFO (lfo-3)
-    out ────────────────> cutoff_mod
-                    Low-Pass Filter (lpf-1)
-```
-
-This creates a saw wave filtered by an LPF with LFO-modulated cutoff, routed to the output.
-
-## Testing
-
-```bash
-cargo test
-```
+Press `?` in any pane to see its full keybinding reference.
 
 ## Architecture
 
 ```
 src/
-├── main.rs          # Application entry, event loop
-├── panes/           # UI panes (Rack, Add, Edit)
-├── state/           # State management
-│   ├── module.rs    # Module types, ports, parameters
-│   ├── connection.rs # Connections between ports
-│   └── rack.rs      # RackState with persistence
-└── ui/              # UI framework
-    ├── pane.rs      # Pane trait, Action enum
-    ├── graphics.rs  # Drawing primitives
-    └── keymap.rs    # Keybinding system
+├── main.rs            Event loop, action dispatch, playback engine
+├── dispatch.rs        Action dispatch logic
+├── panes/             UI views
+│   ├── strip_pane     Main rack display
+│   ├── piano_roll     Note editor
+│   ├── mixer          Channel strips
+│   ├── add_pane       Module picker
+│   ├── sequencer      Timeline
+│   └── ...
+├── state/             Application state
+│   ├── strip          Modules, connections, mixer channels
+│   ├── piano_roll     Tracks, notes, transport
+│   ├── persistence    SQLite save/load
+│   └── custom_synthdef  User instrument registry
+├── audio/             SuperCollider integration
+│   ├── engine         Synth management, bus allocation, routing
+│   └── osc_client     OSC message/bundle transport
+└── ui/                TUI framework
+    ├── pane           Pane trait, Action enum
+    ├── keymap         Keybinding system
+    ├── style          Colors and theming
+    └── frame          Frame buffer, rendering
 ```
+
+### Data Flow
+
+```
+User Input -> Pane::handle_input() -> Action -> main.rs dispatch -> mutate state / send OSC
+```
+
+Panes never mutate state directly. All mutations flow through the Action enum and are handled centrally in the dispatch loop.
+
+### Audio Engine
+
+SuperCollider runs as an external process (`scsynth`). The DAW communicates entirely over OSC/UDP:
+
+- Modules map to synth nodes, organized into source/processing/output groups
+- Connections allocate buses — audio buses for signal, control buses for modulation
+- `rebuild_routing()` reconstructs the full audio graph on topology changes
+- Bundles with NTP timetags enable sub-frame scheduling precision (~60fps render loop, but note timing is not quantized to frames)
+
+## Persistence
+
+Sessions are stored as SQLite databases at `~/.config/tuidaw/rack.tuidaw`.
+
+Currently persisted:
+- Modules with all parameters
+- Connections between modules
+- Session metadata
+
+## Testing
+
+```bash
+cargo test --bin tuidaw    # unit tests
+cargo test                 # all tests
+```
+
+## Dependencies
+
+| Crate      | Purpose                       |
+|------------|-------------------------------|
+| ratatui    | Terminal UI rendering         |
+| crossterm  | Terminal I/O backend          |
+| rosc       | OSC protocol for SuperCollider|
+| rusqlite   | SQLite persistence            |
+| midir      | MIDI input                    |
+| serde      | Serialization                 |
+| regex      | SCD file parsing              |
+| dirs       | Platform config directories   |
+
+## License
+
+This project is licensed under the GNU General Public License v3.0. See [LICENSE](LICENSE) for details.

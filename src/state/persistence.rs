@@ -1,7 +1,8 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use rusqlite::{Connection as SqlConnection, Result as SqlResult};
 
+use super::custom_synthdef::{CustomSynthDef, CustomSynthDefRegistry, ParamSpec};
 use super::music::{Key, Scale};
 use super::param::{Param, ParamValue};
 use super::piano_roll::PianoRollState;
@@ -187,7 +188,27 @@ impl StripState {
                 PRIMARY KEY (lane_id, tick)
             );
 
+            CREATE TABLE IF NOT EXISTS custom_synthdefs (
+                id INTEGER PRIMARY KEY,
+                name TEXT NOT NULL,
+                synthdef_name TEXT NOT NULL,
+                source_path TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS custom_synthdef_params (
+                synthdef_id INTEGER NOT NULL,
+                position INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                default_val REAL NOT NULL,
+                min_val REAL NOT NULL,
+                max_val REAL NOT NULL,
+                PRIMARY KEY (synthdef_id, position),
+                FOREIGN KEY (synthdef_id) REFERENCES custom_synthdefs(id)
+            );
+
             -- Clear existing data
+            DELETE FROM custom_synthdef_params;
+            DELETE FROM custom_synthdefs;
             DELETE FROM automation_points;
             DELETE FROM automation_lanes;
             DELETE FROM sampler_slices;
@@ -227,6 +248,40 @@ impl StripState {
         self.save_piano_roll(&conn, session)?;
         self.save_sampler_configs(&conn)?;
         self.save_automation(&conn)?;
+        self.save_custom_synthdefs(&conn)?;
+
+        Ok(())
+    }
+
+    fn save_custom_synthdefs(&self, conn: &SqlConnection) -> SqlResult<()> {
+        let mut synthdef_stmt = conn.prepare(
+            "INSERT INTO custom_synthdefs (id, name, synthdef_name, source_path)
+             VALUES (?1, ?2, ?3, ?4)",
+        )?;
+        let mut param_stmt = conn.prepare(
+            "INSERT INTO custom_synthdef_params (synthdef_id, position, name, default_val, min_val, max_val)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        )?;
+
+        for synthdef in &self.custom_synthdefs.synthdefs {
+            synthdef_stmt.execute(rusqlite::params![
+                synthdef.id,
+                &synthdef.name,
+                &synthdef.synthdef_name,
+                synthdef.source_path.to_string_lossy().as_ref(),
+            ])?;
+
+            for (pos, param) in synthdef.params.iter().enumerate() {
+                param_stmt.execute(rusqlite::params![
+                    synthdef.id,
+                    pos as i32,
+                    &param.name,
+                    param.default as f64,
+                    param.min as f64,
+                    param.max as f64,
+                ])?;
+            }
+        }
 
         Ok(())
     }
@@ -240,7 +295,10 @@ impl StripState {
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23)",
         )?;
         for (pos, strip) in self.strips.iter().enumerate() {
-            let source_str = strip.source.short_name();
+            let source_str = match strip.source {
+                OscType::Custom(id) => format!("custom:{}", id),
+                _ => strip.source.short_name().to_string(),
+            };
             let (filter_type, filter_cutoff, filter_res): (Option<String>, Option<f64>, Option<f64>) =
                 if let Some(ref f) = strip.filter {
                     (Some(format!("{:?}", f.filter_type).to_lowercase()), Some(f.cutoff.value as f64), Some(f.resonance.value as f64))
@@ -542,6 +600,8 @@ impl StripState {
         let (piano_roll, session) = load_piano_roll(&conn)?;
         let automation = load_automation(&conn)?;
 
+        let custom_synthdefs = load_custom_synthdefs(&conn)?;
+
         Ok((Self {
             strips,
             selected: None,
@@ -553,6 +613,7 @@ impl StripState {
             mixer_selection: MixerSelection::default(),
             automation,
             midi_recording: super::midi_recording::MidiRecordingState::new(),
+            custom_synthdefs,
         }, session))
     }
 }
@@ -1131,6 +1192,70 @@ fn load_automation(conn: &SqlConnection) -> SqlResult<super::automation::Automat
     Ok(state)
 }
 
+fn load_custom_synthdefs(conn: &SqlConnection) -> SqlResult<CustomSynthDefRegistry> {
+    let mut registry = CustomSynthDefRegistry::new();
+
+    // Load synthdefs
+    if let Ok(mut stmt) = conn.prepare(
+        "SELECT id, name, synthdef_name, source_path FROM custom_synthdefs ORDER BY id",
+    ) {
+        if let Ok(rows) = stmt.query_map([], |row| {
+            Ok((
+                row.get::<_, u32>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+            ))
+        }) {
+            for result in rows {
+                if let Ok((id, name, synthdef_name, source_path)) = result {
+                    let synthdef = CustomSynthDef {
+                        id,
+                        name,
+                        synthdef_name,
+                        source_path: PathBuf::from(source_path),
+                        params: Vec::new(),
+                    };
+                    registry.synthdefs.push(synthdef);
+                    if id >= registry.next_id {
+                        registry.next_id = id + 1;
+                    }
+                }
+            }
+        }
+    }
+
+    // Load params for each synthdef
+    if let Ok(mut stmt) = conn.prepare(
+        "SELECT synthdef_id, name, default_val, min_val, max_val FROM custom_synthdef_params ORDER BY synthdef_id, position",
+    ) {
+        if let Ok(rows) = stmt.query_map([], |row| {
+            Ok((
+                row.get::<_, u32>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, f64>(2)?,
+                row.get::<_, f64>(3)?,
+                row.get::<_, f64>(4)?,
+            ))
+        }) {
+            for result in rows {
+                if let Ok((synthdef_id, name, default_val, min_val, max_val)) = result {
+                    if let Some(synthdef) = registry.synthdefs.iter_mut().find(|s| s.id == synthdef_id) {
+                        synthdef.params.push(ParamSpec {
+                            name,
+                            default: default_val as f32,
+                            min: min_val as f32,
+                            max: max_val as f32,
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(registry)
+}
+
 // --- Parse helpers ---
 
 fn parse_key(s: &str) -> Key {
@@ -1149,6 +1274,13 @@ fn parse_osc_type(s: &str) -> OscType {
         "tri" => OscType::Tri,
         "audio_in" => OscType::AudioIn,
         "sampler" => OscType::Sampler,
+        other if other.starts_with("custom:") => {
+            if let Ok(id) = other[7..].parse::<u32>() {
+                OscType::Custom(id)
+            } else {
+                OscType::Saw
+            }
+        }
         _ => OscType::Saw,
     }
 }

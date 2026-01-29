@@ -1,4 +1,5 @@
 mod add_pane;
+mod file_browser_pane;
 mod frame_edit_pane;
 mod help_pane;
 mod home_pane;
@@ -10,6 +11,7 @@ mod strip_edit_pane;
 mod strip_pane;
 
 pub use add_pane::AddPane;
+pub use file_browser_pane::FileBrowserPane;
 pub use frame_edit_pane::FrameEditPane;
 pub use help_pane::HelpPane;
 pub use home_pane::HomePane;

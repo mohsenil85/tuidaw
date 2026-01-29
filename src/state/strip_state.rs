@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::automation::AutomationState;
+use super::custom_synthdef::CustomSynthDefRegistry;
 use super::midi_recording::MidiRecordingState;
 use super::piano_roll::PianoRollState;
 use super::strip::*;
@@ -32,6 +33,7 @@ pub struct StripState {
     pub mixer_selection: MixerSelection,
     pub automation: AutomationState,
     pub midi_recording: MidiRecordingState,
+    pub custom_synthdefs: CustomSynthDefRegistry,
 }
 
 impl StripState {
@@ -48,13 +50,33 @@ impl StripState {
             mixer_selection: MixerSelection::default(),
             automation: AutomationState::new(),
             midi_recording: MidiRecordingState::new(),
+            custom_synthdefs: CustomSynthDefRegistry::new(),
         }
     }
 
     pub fn add_strip(&mut self, source: OscType) -> StripId {
         let id = self.next_id;
         self.next_id += 1;
-        let strip = Strip::new(id, source);
+        let mut strip = Strip::new(id, source);
+
+        // For custom synthdefs, set params from registry
+        if let OscType::Custom(custom_id) = source {
+            if let Some(synthdef) = self.custom_synthdefs.get(custom_id) {
+                // Set the name to include the custom synthdef name
+                strip.name = format!("{}-{}", synthdef.synthdef_name, id);
+                // Set params from the registry
+                strip.source_params = synthdef
+                    .params
+                    .iter()
+                    .map(|p| super::param::Param {
+                        name: p.name.clone(),
+                        value: super::param::ParamValue::Float(p.default),
+                        min: p.min,
+                        max: p.max,
+                    })
+                    .collect();
+            }
+        }
 
         // Auto-add piano roll track if strip has_track
         if strip.has_track {
