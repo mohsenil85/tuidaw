@@ -75,7 +75,7 @@ fn run(backend: &mut RatatuiBackend) -> std::io::Result<()> {
                 }
                 if audio_engine.is_running() {
                     if let Some(strip_pane) = panes.get_pane_mut::<StripPane>("strip") {
-                        let _ = audio_engine.rebuild_strip_routing(strip_pane.state());
+                        let _ = audio_engine.update_all_strip_mixer_params(strip_pane.state());
                     }
                 }
                 continue;

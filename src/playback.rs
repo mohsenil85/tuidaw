@@ -59,28 +59,28 @@ pub fn tick_playback(
 
     // Phase 2: send note-ons/offs and process automation
     if let Some((note_ons, old_playhead, new_playhead, tick_delta, secs_per_tick)) = playback_data {
-        if audio_engine.is_running() {
-            let state_clone = panes
-                .get_pane_mut::<StripPane>("strip")
-                .map(|sp| sp.state().clone());
+        let state_clone = if audio_engine.is_running() {
+            panes.get_pane_mut::<StripPane>("strip").map(|sp| sp.state().clone())
+        } else {
+            None
+        };
 
-            if let Some(state) = state_clone {
-                // Process note-ons
-                for &(strip_id, pitch, velocity, duration, note_tick) in &note_ons {
-                    let ticks_from_now = if note_tick >= old_playhead {
-                        (note_tick - old_playhead) as f64
-                    } else {
-                        0.0
-                    };
-                    let offset = ticks_from_now * secs_per_tick;
-                    let vel_f = velocity as f32 / 127.0;
-                    let _ = audio_engine.spawn_voice(strip_id, pitch, vel_f, offset, &state);
-                    active_notes.push((strip_id, pitch, duration));
-                }
-
-                // Process automation
-                process_automation(audio_engine, &state, new_playhead);
+        if let Some(ref state) = state_clone {
+            // Process note-ons
+            for &(strip_id, pitch, velocity, duration, note_tick) in &note_ons {
+                let ticks_from_now = if note_tick >= old_playhead {
+                    (note_tick - old_playhead) as f64
+                } else {
+                    0.0
+                };
+                let offset = ticks_from_now * secs_per_tick;
+                let vel_f = velocity as f32 / 127.0;
+                let _ = audio_engine.spawn_voice(strip_id, pitch, vel_f, offset, state);
+                active_notes.push((strip_id, pitch, duration));
             }
+
+            // Process automation
+            process_automation(audio_engine, state, new_playhead);
         }
 
         // Process active notes: decrement remaining ticks, send note-offs
@@ -95,10 +95,10 @@ pub fn tick_playback(
         }
         active_notes.retain(|n| n.2 > 0);
 
-        if audio_engine.is_running() {
+        if let Some(ref state) = state_clone {
             for (strip_id, pitch, remaining) in &note_offs {
                 let offset = *remaining as f64 * secs_per_tick;
-                let _ = audio_engine.release_voice(*strip_id, *pitch, offset);
+                let _ = audio_engine.release_voice(*strip_id, *pitch, offset, state);
             }
         }
     }

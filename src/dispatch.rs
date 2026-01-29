@@ -300,9 +300,8 @@ pub fn dispatch_action(
                 if let Some((bus_id, level, mute, pan)) = bus_update {
                     let _ = audio_engine.set_bus_mixer_params(bus_id, level, mute, pan);
                 }
-                // Rebuild to update strip output levels
                 if let Some(strip_pane) = panes.get_pane_mut::<StripPane>("strip") {
-                    let _ = audio_engine.rebuild_strip_routing(strip_pane.state());
+                    let _ = audio_engine.update_all_strip_mixer_params(strip_pane.state());
                 }
             }
         }
@@ -335,7 +334,7 @@ pub fn dispatch_action(
                     let _ = audio_engine.set_bus_mixer_params(bus_id, level, mute, pan);
                 }
                 if let Some(strip_pane) = panes.get_pane_mut::<StripPane>("strip") {
-                    let _ = audio_engine.rebuild_strip_routing(strip_pane.state());
+                    let _ = audio_engine.update_all_strip_mixer_params(strip_pane.state());
                 }
             }
         }
@@ -366,7 +365,7 @@ pub fn dispatch_action(
                     let _ = audio_engine.set_bus_mixer_params(bus_id, level, mute, pan);
                 }
                 if let Some(strip_pane) = panes.get_pane_mut::<StripPane>("strip") {
-                    let _ = audio_engine.rebuild_strip_routing(strip_pane.state());
+                    let _ = audio_engine.update_all_strip_mixer_params(strip_pane.state());
                 }
             }
         }
