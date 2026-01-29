@@ -206,7 +206,33 @@ impl StripState {
                 FOREIGN KEY (synthdef_id) REFERENCES custom_synthdefs(id)
             );
 
+            CREATE TABLE IF NOT EXISTS drum_pads (
+                pad_index INTEGER PRIMARY KEY,
+                buffer_id INTEGER,
+                path TEXT,
+                name TEXT NOT NULL DEFAULT '',
+                level REAL NOT NULL DEFAULT 0.8
+            );
+
+            CREATE TABLE IF NOT EXISTS drum_patterns (
+                pattern_index INTEGER NOT NULL,
+                length INTEGER NOT NULL DEFAULT 16,
+                PRIMARY KEY (pattern_index)
+            );
+
+            CREATE TABLE IF NOT EXISTS drum_steps (
+                pattern_index INTEGER NOT NULL,
+                pad_index INTEGER NOT NULL,
+                step_index INTEGER NOT NULL,
+                velocity INTEGER NOT NULL DEFAULT 100,
+                PRIMARY KEY (pattern_index, pad_index, step_index),
+                FOREIGN KEY (pattern_index) REFERENCES drum_patterns(pattern_index)
+            );
+
             -- Clear existing data
+            DELETE FROM drum_steps;
+            DELETE FROM drum_patterns;
+            DELETE FROM drum_pads;
             DELETE FROM custom_synthdef_params;
             DELETE FROM custom_synthdefs;
             DELETE FROM automation_points;
@@ -249,7 +275,52 @@ impl StripState {
         self.save_sampler_configs(&conn)?;
         self.save_automation(&conn)?;
         self.save_custom_synthdefs(&conn)?;
+        self.save_drum_sequencer(&conn)?;
 
+        Ok(())
+    }
+
+    fn save_drum_sequencer(&self, conn: &SqlConnection) -> SqlResult<()> {
+        let seq = &self.drum_sequencer;
+
+        // Save pads
+        let mut pad_stmt = conn.prepare(
+            "INSERT INTO drum_pads (pad_index, buffer_id, path, name, level)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+        )?;
+        for (i, pad) in seq.pads.iter().enumerate() {
+            pad_stmt.execute(rusqlite::params![
+                i,
+                pad.buffer_id.map(|id| id as i32),
+                pad.path,
+                pad.name,
+                pad.level as f64,
+            ])?;
+        }
+
+        // Save patterns
+        let mut pattern_stmt = conn.prepare(
+            "INSERT INTO drum_patterns (pattern_index, length) VALUES (?1, ?2)",
+        )?;
+        let mut step_stmt = conn.prepare(
+            "INSERT INTO drum_steps (pattern_index, pad_index, step_index, velocity)
+             VALUES (?1, ?2, ?3, ?4)",
+        )?;
+
+        for (pi, pattern) in seq.patterns.iter().enumerate() {
+            pattern_stmt.execute(rusqlite::params![pi, pattern.length])?;
+
+            // Save only active steps
+            for (pad_idx, pad_steps) in pattern.steps.iter().enumerate() {
+                for (step_idx, step) in pad_steps.iter().enumerate() {
+                    if step.active {
+                        step_stmt.execute(rusqlite::params![
+                            pi, pad_idx, step_idx, step.velocity as i32
+                        ])?;
+                    }
+                }
+            }
+        }
         Ok(())
     }
 
@@ -601,6 +672,7 @@ impl StripState {
         let automation = load_automation(&conn)?;
 
         let custom_synthdefs = load_custom_synthdefs(&conn)?;
+        let drum_sequencer = load_drum_sequencer(&conn).unwrap_or_else(|_| super::drum_sequencer::DrumSequencerState::new());
 
         Ok((Self {
             strips,
@@ -614,6 +686,7 @@ impl StripState {
             automation,
             midi_recording: super::midi_recording::MidiRecordingState::new(),
             custom_synthdefs,
+            drum_sequencer,
         }, session))
     }
 }
@@ -1190,6 +1263,93 @@ fn load_automation(conn: &SqlConnection) -> SqlResult<super::automation::Automat
     }
 
     Ok(state)
+}
+
+fn load_drum_sequencer(conn: &SqlConnection) -> SqlResult<super::drum_sequencer::DrumSequencerState> {
+    use super::drum_sequencer::{DrumPattern, DrumSequencerState};
+
+    let mut seq = DrumSequencerState::new();
+
+    // Load pads
+    if let Ok(mut stmt) = conn.prepare(
+        "SELECT pad_index, buffer_id, path, name, level FROM drum_pads",
+    ) {
+        if let Ok(rows) = stmt.query_map([], |row| {
+            Ok((
+                row.get::<_, usize>(0)?,
+                row.get::<_, Option<u32>>(1)?,
+                row.get::<_, Option<String>>(2)?,
+                row.get::<_, String>(3)?,
+                row.get::<_, f64>(4)?,
+            ))
+        }) {
+            for row in rows {
+                if let Ok((idx, buffer_id, path, name, level)) = row {
+                    if let Some(pad) = seq.pads.get_mut(idx) {
+                        pad.buffer_id = buffer_id;
+                        pad.path = path;
+                        pad.name = name;
+                        pad.level = level as f32;
+                    }
+                }
+            }
+        }
+    }
+
+    // Track highest buffer_id for allocator
+    let max_id = seq
+        .pads
+        .iter()
+        .filter_map(|p| p.buffer_id)
+        .max()
+        .unwrap_or(9999);
+    seq.next_buffer_id = max_id + 1;
+
+    // Load patterns
+    if let Ok(mut stmt) = conn.prepare(
+        "SELECT pattern_index, length FROM drum_patterns ORDER BY pattern_index",
+    ) {
+        if let Ok(rows) = stmt.query_map([], |row| {
+            Ok((row.get::<_, usize>(0)?, row.get::<_, usize>(1)?))
+        }) {
+            for row in rows {
+                if let Ok((idx, length)) = row {
+                    if let Some(pattern) = seq.patterns.get_mut(idx) {
+                        *pattern = DrumPattern::new(length);
+                    }
+                }
+            }
+        }
+    }
+
+    // Load active steps
+    if let Ok(mut stmt) = conn.prepare(
+        "SELECT pattern_index, pad_index, step_index, velocity FROM drum_steps",
+    ) {
+        if let Ok(rows) = stmt.query_map([], |row| {
+            Ok((
+                row.get::<_, usize>(0)?,
+                row.get::<_, usize>(1)?,
+                row.get::<_, usize>(2)?,
+                row.get::<_, u8>(3)?,
+            ))
+        }) {
+            for row in rows {
+                if let Ok((pi, pad_idx, step_idx, velocity)) = row {
+                    if let Some(pattern) = seq.patterns.get_mut(pi) {
+                        if let Some(step) =
+                            pattern.steps.get_mut(pad_idx).and_then(|s| s.get_mut(step_idx))
+                        {
+                            step.active = true;
+                            step.velocity = velocity;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(seq)
 }
 
 fn load_custom_synthdefs(conn: &SqlConnection) -> SqlResult<CustomSynthDefRegistry> {

@@ -187,6 +187,7 @@ fn run(backend: &mut RatatuiBackend) -> std::io::Result<()> {
             let elapsed = now.duration_since(last_frame_time);
             last_frame_time = now;
             playback::tick_playback(&mut state, &mut audio_engine, &mut active_notes, elapsed);
+            playback::tick_drum_sequencer(&mut state, &mut audio_engine, elapsed);
         }
 
         // Update master meter from real audio peak

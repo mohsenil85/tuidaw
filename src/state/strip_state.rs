@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use super::automation::AutomationState;
 use super::custom_synthdef::CustomSynthDefRegistry;
+use super::drum_sequencer::DrumSequencerState;
 use super::midi_recording::MidiRecordingState;
 use super::piano_roll::PianoRollState;
 use super::strip::*;
@@ -34,6 +35,7 @@ pub struct StripState {
     pub automation: AutomationState,
     pub midi_recording: MidiRecordingState,
     pub custom_synthdefs: CustomSynthDefRegistry,
+    pub drum_sequencer: DrumSequencerState,
 }
 
 impl StripState {
@@ -51,6 +53,7 @@ impl StripState {
             automation: AutomationState::new(),
             midi_recording: MidiRecordingState::new(),
             custom_synthdefs: CustomSynthDefRegistry::new(),
+            drum_sequencer: DrumSequencerState::new(),
         }
     }
 

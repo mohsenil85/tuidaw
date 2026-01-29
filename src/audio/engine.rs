@@ -1072,6 +1072,35 @@ impl AudioEngine {
         }
     }
 
+    /// Play a one-shot drum sample (uses tuidaw_sampler_oneshot, auto-frees)
+    pub fn play_drum_hit(&mut self, buffer_id: BufferId, amp: f32) -> Result<(), String> {
+        let client = self.client.as_ref().ok_or("Not connected")?;
+        let bufnum = *self.buffer_map.get(&buffer_id).ok_or("Buffer not loaded")?;
+
+        let node_id = self.next_node_id;
+        self.next_node_id += 1;
+
+        client
+            .send_message(
+                "/s_new",
+                vec![
+                    rosc::OscType::String("tuidaw_sampler_oneshot".to_string()),
+                    rosc::OscType::Int(node_id),
+                    rosc::OscType::Int(0), // addToHead
+                    rosc::OscType::Int(GROUP_SOURCES),
+                    rosc::OscType::String("bufnum".to_string()),
+                    rosc::OscType::Int(bufnum),
+                    rosc::OscType::String("amp".to_string()),
+                    rosc::OscType::Float(amp),
+                    rosc::OscType::String("out".to_string()),
+                    rosc::OscType::Int(0), // direct to hardware output
+                ],
+            )
+            .map_err(|e| e.to_string())?;
+
+        Ok(())
+    }
+
     /// Get the current master peak level
     pub fn master_peak(&self) -> f32 {
         self.client

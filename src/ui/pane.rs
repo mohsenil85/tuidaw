@@ -5,6 +5,22 @@ use super::{Graphics, InputEvent, Keymap};
 use super::frame::SessionState;
 use crate::state::{AppState, EffectType, FilterType, OscType, StripId};
 
+/// Drum sequencer actions
+#[derive(Debug, Clone, PartialEq)]
+pub enum SequencerAction {
+    ToggleStep(usize, usize),         // (pad_idx, step_idx)
+    AdjustVelocity(usize, usize, i8), // (pad_idx, step_idx, delta)
+    PlayStop,
+    LoadSample(usize),              // pad_idx
+    ClearPad(usize),                // pad_idx
+    ClearPattern,
+    CyclePatternLength,
+    NextPattern,
+    PrevPattern,
+    AdjustPadLevel(usize, f32),     // (pad_idx, delta)
+    LoadSampleResult(usize, PathBuf), // (pad_idx, path) — from file browser
+}
+
 /// Navigation actions (pane switching, modal stack)
 #[derive(Debug, Clone, PartialEq)]
 pub enum NavAction {
@@ -113,12 +129,14 @@ pub enum Action {
     PianoRoll(PianoRollAction),
     Server(ServerAction),
     Session(SessionAction),
+    Sequencer(SequencerAction),
 }
 
 /// Action to take when a file is selected in the file browser
 #[derive(Debug, Clone, PartialEq)]
 pub enum FileSelectAction {
     ImportCustomSynthDef,
+    LoadDrumSample(usize), // pad index
 }
 
 /// Trait for UI panes (screens/views).

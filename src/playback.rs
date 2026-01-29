@@ -96,6 +96,52 @@ pub fn tick_playback(
     }
 }
 
+/// Advance the drum sequencer and trigger pad hits.
+pub fn tick_drum_sequencer(
+    state: &mut AppState,
+    audio_engine: &mut AudioEngine,
+    elapsed: Duration,
+) {
+    let bpm = state.strip.piano_roll.bpm;
+    let seq = &mut state.strip.drum_sequencer;
+    if !seq.playing {
+        return;
+    }
+
+    let pattern_length = seq.pattern().length;
+    // Each step = 1 sixteenth note = 1/4 beat
+    let steps_per_beat = 4.0_f32;
+    let steps_per_second = (bpm / 60.0) * steps_per_beat;
+
+    seq.step_accumulator += elapsed.as_secs_f32() * steps_per_second;
+
+    while seq.step_accumulator >= 1.0 {
+        seq.step_accumulator -= 1.0;
+        seq.current_step = (seq.current_step + 1) % pattern_length;
+
+        // Trigger active pads at this step
+        if audio_engine.is_running() {
+            let current_step = seq.current_step;
+            let current_pattern = seq.current_pattern;
+            let pattern = &seq.patterns[current_pattern];
+            for (pad_idx, pad) in seq.pads.iter().enumerate() {
+                if let Some(buffer_id) = pad.buffer_id {
+                    if let Some(step) = pattern
+                        .steps
+                        .get(pad_idx)
+                        .and_then(|s| s.get(current_step))
+                    {
+                        if step.active {
+                            let amp = (step.velocity as f32 / 127.0) * pad.level;
+                            let _ = audio_engine.play_drum_hit(buffer_id, amp);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 /// Process automation lanes and apply values at the current playhead
 fn process_automation(
     audio_engine: &AudioEngine,

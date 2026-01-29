@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use crate::state::AppState;
 use crate::ui::{
     Action, Color, FileSelectAction, Graphics, InputEvent, KeyCode, Keymap, NavAction, Pane, Rect,
-    SessionAction, Style,
+    SequencerAction, SessionAction, Style,
 };
 
 struct DirEntry {
@@ -19,7 +19,7 @@ pub struct FileBrowserPane {
     current_dir: PathBuf,
     entries: Vec<DirEntry>,
     selected: usize,
-    filter_extension: Option<String>,
+    filter_extensions: Option<Vec<String>>,
     on_select_action: FileSelectAction,
     scroll_offset: usize,
 }
@@ -45,7 +45,7 @@ impl FileBrowserPane {
             current_dir: start_dir,
             entries: Vec::new(),
             selected: 0,
-            filter_extension: Some("scd".to_string()),
+            filter_extensions: Some(vec!["scd".to_string()]),
             on_select_action: FileSelectAction::ImportCustomSynthDef,
             scroll_offset: 0,
         };
@@ -56,8 +56,11 @@ impl FileBrowserPane {
     /// Open for a specific action with optional start directory
     pub fn open_for(&mut self, action: FileSelectAction, start_dir: Option<PathBuf>) {
         self.on_select_action = action.clone();
-        self.filter_extension = match action {
-            FileSelectAction::ImportCustomSynthDef => Some("scd".to_string()),
+        self.filter_extensions = match action {
+            FileSelectAction::ImportCustomSynthDef => Some(vec!["scd".to_string()]),
+            FileSelectAction::LoadDrumSample(_) => {
+                Some(vec!["wav".to_string(), "aiff".to_string(), "aif".to_string()])
+            }
         };
         self.current_dir = start_dir.unwrap_or_else(|| {
             std::env::current_dir().unwrap_or_else(|_| {
@@ -89,8 +92,11 @@ impl FileBrowserPane {
 
                 // Filter files by extension if set
                 if !is_dir {
-                    if let Some(ref ext) = self.filter_extension {
-                        if path.extension().map_or(true, |e| e != ext.as_str()) {
+                    if let Some(ref exts) = self.filter_extensions {
+                        if path
+                            .extension()
+                            .map_or(true, |e| !exts.iter().any(|ext| e == ext.as_str()))
+                        {
                             continue;
                         }
                     }
@@ -146,6 +152,9 @@ impl Pane for FileBrowserPane {
                         match self.on_select_action {
                             FileSelectAction::ImportCustomSynthDef => {
                                 Action::Session(SessionAction::ImportCustomSynthDef(entry.path.clone()))
+                            }
+                            FileSelectAction::LoadDrumSample(pad_idx) => {
+                                Action::Sequencer(SequencerAction::LoadSampleResult(pad_idx, entry.path.clone()))
                             }
                         }
                     }
@@ -203,8 +212,12 @@ impl Pane for FileBrowserPane {
         let box_height = 29;
         let rect = Rect::centered(width, height, box_width, box_height);
 
+        let title = match self.on_select_action {
+            FileSelectAction::ImportCustomSynthDef => " Import Custom SynthDef ",
+            FileSelectAction::LoadDrumSample(_) => " Load Sample ",
+        };
         g.set_style(Style::new().fg(Color::PURPLE));
-        g.draw_box(rect, Some(" Import Custom SynthDef "));
+        g.draw_box(rect, Some(title));
 
         let content_x = rect.x + 2;
         let content_y = rect.y + 2;
@@ -239,7 +252,16 @@ impl Pane for FileBrowserPane {
 
         if entries.is_empty() {
             g.set_style(Style::new().fg(Color::DARK_GRAY));
-            g.put_str(content_x, list_y, "(no .scd files found)");
+            let ext_label = self
+                .filter_extensions
+                .as_ref()
+                .map(|exts| exts.join("/"))
+                .unwrap_or_default();
+            g.put_str(
+                content_x,
+                list_y,
+                &format!("(no .{} files found)", ext_label),
+            );
         } else {
             for (i, entry) in entries
                 .iter()

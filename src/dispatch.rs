@@ -3,8 +3,9 @@ use std::path::PathBuf;
 use crate::audio::{self, AudioEngine};
 use crate::panes::{FileBrowserPane, PianoRollPane, ServerPane, StripEditPane};
 use crate::scd_parser;
+use crate::state::drum_sequencer::DrumPattern;
 use crate::state::{AppState, CustomSynthDef, MixerSelection, ParamSpec, StripState};
-use crate::ui::{Action, Frame, MixerAction, PaneManager, PianoRollAction, ServerAction, SessionAction, StripAction};
+use crate::ui::{Action, Frame, MixerAction, PaneManager, PianoRollAction, SequencerAction, ServerAction, SessionAction, StripAction};
 
 /// Default path for save file
 pub fn default_rack_path() -> PathBuf {
@@ -33,8 +34,9 @@ pub fn dispatch_action(
         Action::Strip(a) => dispatch_strip(a, state, panes, audio_engine, active_notes),
         Action::Mixer(a) => dispatch_mixer(a, state, audio_engine),
         Action::PianoRoll(a) => dispatch_piano_roll(a, state, panes, audio_engine, active_notes),
-        Action::Server(a) => dispatch_server(a, panes, audio_engine),
+        Action::Server(a) => dispatch_server(a, state, panes, audio_engine),
         Action::Session(a) => dispatch_session(a, state, panes, audio_engine, app_frame),
+        Action::Sequencer(a) => dispatch_sequencer(a, state, panes, audio_engine),
         Action::None => {}
     }
     false
@@ -471,6 +473,7 @@ fn dispatch_piano_roll(
 
 fn dispatch_server(
     action: &ServerAction,
+    state: &mut AppState,
     panes: &mut PaneManager,
     audio_engine: &mut AudioEngine,
 ) {
@@ -491,6 +494,15 @@ fn dispatch_server(
                         } else {
                             Ok(())
                         };
+
+                        // Load drum sequencer samples
+                        for pad in &state.strip.drum_sequencer.pads {
+                            if let Some(buffer_id) = pad.buffer_id {
+                                if let Some(ref path) = pad.path {
+                                    let _ = audio_engine.load_sample(buffer_id, path);
+                                }
+                            }
+                        }
 
                         match (builtin_result, custom_result) {
                             (Ok(()), Ok(())) => {
@@ -713,6 +725,130 @@ fn dispatch_session(
                     panes.pop(&*state);
                 }
             }
+        }
+    }
+}
+
+fn dispatch_sequencer(
+    action: &SequencerAction,
+    state: &mut AppState,
+    panes: &mut PaneManager,
+    audio_engine: &mut AudioEngine,
+) {
+    match action {
+        SequencerAction::ToggleStep(pad_idx, step_idx) => {
+            if let Some(step) = state
+                .strip
+                .drum_sequencer
+                .pattern_mut()
+                .steps
+                .get_mut(*pad_idx)
+                .and_then(|s| s.get_mut(*step_idx))
+            {
+                step.active = !step.active;
+            }
+        }
+        SequencerAction::AdjustVelocity(pad_idx, step_idx, delta) => {
+            if let Some(step) = state
+                .strip
+                .drum_sequencer
+                .pattern_mut()
+                .steps
+                .get_mut(*pad_idx)
+                .and_then(|s| s.get_mut(*step_idx))
+            {
+                step.velocity = (step.velocity as i16 + *delta as i16).clamp(1, 127) as u8;
+            }
+        }
+        SequencerAction::ClearPad(pad_idx) => {
+            for step in state
+                .strip
+                .drum_sequencer
+                .pattern_mut()
+                .steps
+                .get_mut(*pad_idx)
+                .iter_mut()
+                .flat_map(|s| s.iter_mut())
+            {
+                step.active = false;
+            }
+        }
+        SequencerAction::ClearPattern => {
+            let len = state.strip.drum_sequencer.pattern().length;
+            *state.strip.drum_sequencer.pattern_mut() = DrumPattern::new(len);
+        }
+        SequencerAction::CyclePatternLength => {
+            let lengths = [8, 16, 32, 64];
+            let current = state.strip.drum_sequencer.pattern().length;
+            let idx = lengths.iter().position(|&l| l == current).unwrap_or(0);
+            let new_len = lengths[(idx + 1) % lengths.len()];
+            let old_pattern = state.strip.drum_sequencer.pattern().clone();
+            let mut new_pattern = DrumPattern::new(new_len);
+            for (pad_idx, old_steps) in old_pattern.steps.iter().enumerate() {
+                for (step_idx, step) in old_steps.iter().enumerate() {
+                    if step_idx < new_len {
+                        new_pattern.steps[pad_idx][step_idx] = step.clone();
+                    }
+                }
+            }
+            *state.strip.drum_sequencer.pattern_mut() = new_pattern;
+        }
+        SequencerAction::NextPattern => {
+            let seq = &mut state.strip.drum_sequencer;
+            seq.current_pattern = (seq.current_pattern + 1) % seq.patterns.len();
+        }
+        SequencerAction::PrevPattern => {
+            let seq = &mut state.strip.drum_sequencer;
+            seq.current_pattern = if seq.current_pattern == 0 {
+                seq.patterns.len() - 1
+            } else {
+                seq.current_pattern - 1
+            };
+        }
+        SequencerAction::AdjustPadLevel(pad_idx, delta) => {
+            if let Some(pad) = state.strip.drum_sequencer.pads.get_mut(*pad_idx) {
+                pad.level = (pad.level + delta).clamp(0.0, 1.0);
+            }
+        }
+        SequencerAction::PlayStop => {
+            let seq = &mut state.strip.drum_sequencer;
+            seq.playing = !seq.playing;
+            if !seq.playing {
+                seq.current_step = 0;
+                seq.step_accumulator = 0.0;
+            }
+        }
+        SequencerAction::LoadSample(pad_idx) => {
+            if let Some(fb) = panes.get_pane_mut::<FileBrowserPane>("file_browser") {
+                fb.open_for(
+                    crate::ui::FileSelectAction::LoadDrumSample(*pad_idx),
+                    None,
+                );
+            }
+            panes.push_to("file_browser", &*state);
+        }
+        SequencerAction::LoadSampleResult(pad_idx, path) => {
+            let path_str = path.to_string_lossy().to_string();
+            let name = path
+                .file_stem()
+                .map(|s| s.to_string_lossy().to_string())
+                .unwrap_or_default();
+
+            let seq = &mut state.strip.drum_sequencer;
+            let buffer_id = seq.next_buffer_id;
+            seq.next_buffer_id += 1;
+
+            if audio_engine.is_running() {
+                let _ = audio_engine.load_sample(buffer_id, &path_str);
+            }
+
+            if let Some(pad) = seq.pads.get_mut(*pad_idx) {
+                pad.buffer_id = Some(buffer_id);
+                pad.path = Some(path_str);
+                pad.name = name;
+            }
+
+            panes.pop(&*state);
         }
     }
 }

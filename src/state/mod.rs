@@ -1,5 +1,6 @@
 pub mod automation;
 pub mod custom_synthdef;
+pub mod drum_sequencer;
 pub mod midi_recording;
 pub mod music;
 pub mod param;
