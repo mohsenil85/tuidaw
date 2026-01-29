@@ -554,9 +554,6 @@ impl AudioEngine {
         self.next_voice_audio_bus = self.bus_allocator.next_audio_bus;
         self.next_voice_control_bus = self.bus_allocator.next_control_bus;
 
-        // Sync group IDs with node IDs to avoid collisions in SuperCollider's shared ID space
-        self.next_group_id = self.next_node_id;
-
         // Allocate audio buses for each mixer bus through the bus allocator
         for bus in &state.buses {
             let bus_audio = self.bus_allocator.get_or_alloc_audio_bus(
@@ -616,6 +613,12 @@ impl AudioEngine {
 
         // (Re)create meter synth
         self.restart_meter();
+
+        // Sync group IDs with node IDs AFTER all node allocations to avoid
+        // collisions in SuperCollider's shared ID namespace (synths and groups
+        // share one ID space — if next_group_id overlaps with bus output or
+        // meter node IDs, spawn_voice's /g_new silently fails).
+        self.next_group_id = self.next_node_id;
 
         Ok(())
     }
