@@ -5,125 +5,103 @@ use super::{Graphics, InputEvent, Keymap};
 use super::frame::SessionState;
 use crate::state::{AppState, EffectType, FilterType, OscType, StripId};
 
+/// Navigation actions (pane switching, modal stack)
+#[derive(Debug, Clone, PartialEq)]
+pub enum NavAction {
+    SwitchPane(&'static str),
+    PushPane(&'static str),
+    PopPane,
+}
+
+/// Strip/instrument actions
+#[derive(Debug, Clone, PartialEq)]
+pub enum StripAction {
+    Add(OscType),
+    Delete(StripId),
+    Edit(StripId),
+    Update(StripId),
+    SetParam(StripId, String, f32),
+    AddEffect(StripId, EffectType),
+    RemoveEffect(StripId, usize),
+    MoveEffect(StripId, usize, i8),
+    SetFilter(StripId, Option<FilterType>),
+    ToggleTrack(StripId),
+    PlayNote(u8, u8),
+    SelectNext,
+    SelectPrev,
+    SelectFirst,
+    SelectLast,
+}
+
+/// Mixer actions
+#[derive(Debug, Clone, PartialEq)]
+pub enum MixerAction {
+    Move(i8),
+    Jump(i8),
+    AdjustLevel(f32),
+    ToggleMute,
+    ToggleSolo,
+    CycleSection,
+    CycleOutput,
+    CycleOutputReverse,
+    AdjustSend(u8, f32),
+    ToggleSend(u8),
+}
+
+/// Piano roll actions
+#[derive(Debug, Clone, PartialEq)]
+pub enum PianoRollAction {
+    ToggleNote,
+    MoveCursor(i8, i32),
+    AdjustDuration(i32),
+    AdjustVelocity(i8),
+    PlayStop,
+    ToggleLoop,
+    SetLoopStart,
+    SetLoopEnd,
+    ChangeTrack(i8),
+    SetBpm(f32),
+    Zoom(i8),
+    ScrollOctave(i8),
+    Jump(i8),
+    CycleTimeSig,
+    TogglePolyMode,
+    PlayNote(u8, u8),
+    PlayStopRecord,
+}
+
+/// Audio server actions
+#[derive(Debug, Clone, PartialEq)]
+pub enum ServerAction {
+    Connect,
+    Disconnect,
+    Start,
+    Stop,
+    CompileSynthDefs,
+    LoadSynthDefs,
+}
+
+/// Session/file actions
+#[derive(Debug, Clone, PartialEq)]
+pub enum SessionAction {
+    Save,
+    Load,
+    UpdateSession(SessionState),
+    OpenFileBrowser(FileSelectAction),
+    ImportCustomSynthDef(PathBuf),
+}
+
 /// Actions that can be returned from pane input handling
 #[derive(Debug, Clone, PartialEq)]
 pub enum Action {
-    /// No action taken, continue as normal
     None,
-    /// Quit the application
     Quit,
-    /// Switch to a different pane by ID
-    SwitchPane(&'static str),
-    /// Push a pane onto the stack (for modals/overlays)
-    PushPane(&'static str),
-    /// Pop the current pane from the stack
-    PopPane,
-    /// Add a strip with the given oscillator type
-    AddStrip(OscType),
-    /// Delete a strip
-    DeleteStrip(StripId),
-    /// Request to edit a strip
-    EditStrip(StripId),
-    /// Update a strip (save edited strip back)
-    UpdateStrip(StripId),
-    /// Real-time parameter update on a strip
-    SetStripParam(StripId, String, f32),
-    /// Add an effect to a strip
-    StripAddEffect(StripId, EffectType),
-    /// Remove an effect from a strip
-    StripRemoveEffect(StripId, usize),
-    /// Move an effect up/down in the chain
-    StripMoveEffect(StripId, usize, i8),
-    /// Set or remove the filter on a strip
-    StripSetFilter(StripId, Option<FilterType>),
-    /// Toggle piano roll track for a strip
-    StripToggleTrack(StripId),
-    /// Save state to file
-    SaveRack,
-    /// Load state from file
-    LoadRack,
-    /// Connect to audio server
-    ConnectServer,
-    /// Disconnect from audio server
-    DisconnectServer,
-    /// Start scsynth server process
-    StartServer,
-    /// Stop scsynth server process
-    StopServer,
-    /// Compile synthdefs (slow - runs sclang)
-    CompileSynthDefs,
-    /// Load pre-compiled synthdefs (fast)
-    LoadSynthDefs,
-    /// Mixer: move selection left/right
-    MixerMove(i8),
-    /// Mixer: jump to first (1) or last (-1) in section
-    MixerJump(i8),
-    /// Mixer: adjust level of selected channel/bus/master
-    MixerAdjustLevel(f32),
-    /// Mixer: toggle mute on selected
-    MixerToggleMute,
-    /// Mixer: toggle solo on selected
-    MixerToggleSolo,
-    /// Mixer: cycle between channels/buses/master sections
-    MixerCycleSection,
-    /// Mixer: cycle output target for selected channel
-    MixerCycleOutput,
-    /// Mixer: cycle output target backwards for selected channel
-    MixerCycleOutputReverse,
-    /// Mixer: adjust send level for a bus
-    MixerAdjustSend(u8, f32),
-    /// Mixer: toggle send enabled for a bus
-    MixerToggleSend(u8),
-    /// Piano roll: place or remove a note at cursor
-    PianoRollToggleNote,
-    /// Piano roll: move cursor (pitch_delta, time_delta)
-    PianoRollMoveCursor(i8, i32),
-    /// Piano roll: adjust duration of note at cursor
-    PianoRollAdjustDuration(i32),
-    /// Piano roll: adjust velocity of note at cursor
-    PianoRollAdjustVelocity(i8),
-    /// Piano roll: toggle play/stop
-    PianoRollPlayStop,
-    /// Piano roll: toggle loop mode
-    PianoRollToggleLoop,
-    /// Piano roll: set loop start to cursor position
-    PianoRollSetLoopStart,
-    /// Piano roll: set loop end to cursor position
-    PianoRollSetLoopEnd,
-    /// Piano roll: switch to next/prev track
-    PianoRollChangeTrack(i8),
-    /// Piano roll: set BPM
-    PianoRollSetBpm(f32),
-    /// Piano roll: zoom time axis
-    PianoRollZoom(i8),
-    /// Piano roll: scroll vertically by octave
-    PianoRollScrollOctave(i8),
-    /// Piano roll: jump to start or end
-    PianoRollJump(i8),
-    /// Piano roll: cycle time signature
-    PianoRollCycleTimeSig,
-    /// Piano roll: toggle polyphonic/monophonic mode for current track
-    PianoRollTogglePolyMode,
-    /// Piano roll: play a note immediately from keyboard (pitch, velocity)
-    PianoRollPlayNote(u8, u8),
-    /// Piano roll: toggle play+record from piano mode
-    PianoRollPlayStopRecord,
-    /// Strip: play a note on the selected strip (pitch, velocity)
-    StripPlayNote(u8, u8),
-    /// Strip: select next strip
-    StripSelectNext,
-    /// Strip: select previous strip
-    StripSelectPrev,
-    /// Strip: select first strip
-    StripSelectFirst,
-    /// Strip: select last strip
-    StripSelectLast,
-    /// Update session state (from frame edit pane)
-    UpdateSession(SessionState),
-    /// Open file browser for custom synthdef import
-    OpenFileBrowser(FileSelectAction),
-    /// Import a custom synthdef from a .scd file
-    ImportCustomSynthDef(PathBuf),
+    Nav(NavAction),
+    Strip(StripAction),
+    Mixer(MixerAction),
+    PianoRoll(PianoRollAction),
+    Server(ServerAction),
+    Session(SessionAction),
 }
 
 /// Action to take when a file is selected in the file browser
@@ -165,6 +143,7 @@ pub trait Pane {
 pub struct PaneManager {
     panes: Vec<Box<dyn Pane>>,
     active_index: usize,
+    stack: Vec<usize>,
 }
 
 impl PaneManager {
@@ -173,6 +152,7 @@ impl PaneManager {
         Self {
             panes: vec![initial_pane],
             active_index: 0,
+            stack: Vec::new(),
         }
     }
 
@@ -191,7 +171,7 @@ impl PaneManager {
         self.panes[self.active_index].as_mut()
     }
 
-    /// Switch to a pane by ID
+    /// Switch to a pane by ID (flat navigation — clears the stack)
     pub fn switch_to(&mut self, id: &str, state: &AppState) -> bool {
         if let Some(index) = self.panes.iter().position(|p| p.id() == id) {
             if index != self.active_index {
@@ -199,6 +179,32 @@ impl PaneManager {
                 self.active_index = index;
                 self.panes[self.active_index].on_enter(state);
             }
+            self.stack.clear();
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Push current pane onto the stack and switch to a new pane (for modals/overlays)
+    pub fn push_to(&mut self, id: &str, state: &AppState) -> bool {
+        if let Some(index) = self.panes.iter().position(|p| p.id() == id) {
+            self.stack.push(self.active_index);
+            self.panes[self.active_index].on_exit(state);
+            self.active_index = index;
+            self.panes[self.active_index].on_enter(state);
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Pop the stack and return to the previous pane
+    pub fn pop(&mut self, state: &AppState) -> bool {
+        if let Some(prev_index) = self.stack.pop() {
+            self.panes[self.active_index].on_exit(state);
+            self.active_index = prev_index;
+            self.panes[self.active_index].on_enter(state);
             true
         } else {
             false
@@ -210,13 +216,15 @@ impl PaneManager {
         let action = self.active_mut().handle_input(event, state);
 
         match &action {
-            Action::SwitchPane(id) => {
+            Action::Nav(NavAction::SwitchPane(id)) => {
                 self.switch_to(id, state);
             }
-            Action::PushPane(id) => {
-                self.switch_to(id, state);
+            Action::Nav(NavAction::PushPane(id)) => {
+                self.push_to(id, state);
             }
-            Action::PopPane => {}
+            Action::Nav(NavAction::PopPane) => {
+                self.pop(state);
+            }
             _ => {}
         }
 

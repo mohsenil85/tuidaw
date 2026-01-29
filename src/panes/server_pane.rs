@@ -2,7 +2,7 @@ use std::any::Any;
 
 use crate::audio::ServerStatus;
 use crate::state::AppState;
-use crate::ui::{Action, Color, Graphics, InputEvent, Keymap, Pane, Rect, Style};
+use crate::ui::{Action, Color, Graphics, InputEvent, Keymap, Pane, Rect, ServerAction, Style};
 
 pub struct ServerPane {
     keymap: Keymap,
@@ -50,12 +50,12 @@ impl Pane for ServerPane {
 
     fn handle_input(&mut self, event: InputEvent, _state: &AppState) -> Action {
         match self.keymap.lookup(&event) {
-            Some("start") => Action::StartServer,
-            Some("stop") => Action::StopServer,
-            Some("connect") => Action::ConnectServer,
-            Some("disconnect") => Action::DisconnectServer,
-            Some("compile") => Action::CompileSynthDefs,
-            Some("load") => Action::LoadSynthDefs,
+            Some("start") => Action::Server(ServerAction::Start),
+            Some("stop") => Action::Server(ServerAction::Stop),
+            Some("connect") => Action::Server(ServerAction::Connect),
+            Some("disconnect") => Action::Server(ServerAction::Disconnect),
+            Some("compile") => Action::Server(ServerAction::CompileSynthDefs),
+            Some("load") => Action::Server(ServerAction::LoadSynthDefs),
             _ => Action::None,
         }
     }

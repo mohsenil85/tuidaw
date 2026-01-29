@@ -1,7 +1,7 @@
 use std::any::Any;
 
 use crate::state::{AppState, OscType};
-use crate::ui::{Action, Color, Graphics, InputEvent, KeyCode, Keymap, Pane, PianoKeyboard, Rect, Style};
+use crate::ui::{Action, NavAction, StripAction, SessionAction, Color, Graphics, InputEvent, KeyCode, Keymap, Pane, PianoKeyboard, Rect, Style};
 
 fn osc_color(osc: OscType) -> Color {
     match osc {
@@ -97,15 +97,15 @@ impl Pane for StripPane {
                     return Action::None;
                 }
                 KeyCode::Up => {
-                    return Action::StripSelectPrev;
+                    return Action::Strip(StripAction::SelectPrev);
                 }
                 KeyCode::Down => {
-                    return Action::StripSelectNext;
+                    return Action::Strip(StripAction::SelectNext);
                 }
                 KeyCode::Char(c) => {
                     if let Some(pitch) = self.piano.key_to_pitch(c) {
                         let velocity = if event.modifiers.shift { 127 } else { 100 };
-                        return Action::StripPlayNote(pitch, velocity);
+                        return Action::Strip(StripAction::PlayNote(pitch, velocity));
                     }
                     return Action::None;
                 }
@@ -115,27 +115,27 @@ impl Pane for StripPane {
 
         match self.keymap.lookup(&event) {
             Some("quit") => Action::Quit,
-            Some("next") => Action::StripSelectNext,
-            Some("prev") => Action::StripSelectPrev,
-            Some("goto_top") => Action::StripSelectFirst,
-            Some("goto_bottom") => Action::StripSelectLast,
-            Some("add") => Action::SwitchPane("add"),
+            Some("next") => Action::Strip(StripAction::SelectNext),
+            Some("prev") => Action::Strip(StripAction::SelectPrev),
+            Some("goto_top") => Action::Strip(StripAction::SelectFirst),
+            Some("goto_bottom") => Action::Strip(StripAction::SelectLast),
+            Some("add") => Action::Nav(NavAction::SwitchPane("add")),
             Some("delete") => {
                 if let Some(strip) = state.strip.selected_strip() {
-                    Action::DeleteStrip(strip.id)
+                    Action::Strip(StripAction::Delete(strip.id))
                 } else {
                     Action::None
                 }
             }
             Some("edit") => {
                 if let Some(strip) = state.strip.selected_strip() {
-                    Action::EditStrip(strip.id)
+                    Action::Strip(StripAction::Edit(strip.id))
                 } else {
                     Action::None
                 }
             }
-            Some("save") => Action::SaveRack,
-            Some("load") => Action::LoadRack,
+            Some("save") => Action::Session(SessionAction::Save),
+            Some("load") => Action::Session(SessionAction::Load),
             Some("piano_mode") => {
                 self.piano.activate();
                 Action::None

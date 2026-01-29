@@ -17,7 +17,7 @@ use audio::AudioEngine;
 use panes::{AddPane, FileBrowserPane, FrameEditPane, HelpPane, HomePane, MixerPane, PianoRollPane, SequencerPane, ServerPane, StripEditPane, StripPane};
 use state::AppState;
 use ui::{
-    Action, Frame, InputSource, KeyCode, PaneManager, RatatuiBackend, ViewState,
+    Action, Frame, InputSource, KeyCode, PaneManager, RatatuiBackend, SessionAction, ViewState,
 };
 
 fn main() -> std::io::Result<()> {
@@ -60,13 +60,13 @@ fn run(backend: &mut RatatuiBackend) -> std::io::Result<()> {
 
             // Global Ctrl-S to save
             if event.key == KeyCode::Char('s') && event.modifiers.ctrl {
-                dispatch::dispatch_action(&Action::SaveRack, &mut state, &mut panes, &mut audio_engine, &mut app_frame, &mut active_notes);
+                dispatch::dispatch_action(&Action::Session(SessionAction::Save), &mut state, &mut panes, &mut audio_engine, &mut app_frame, &mut active_notes);
                 continue;
             }
 
             // Global Ctrl-L to load
             if event.key == KeyCode::Char('l') && event.modifiers.ctrl {
-                dispatch::dispatch_action(&Action::LoadRack, &mut state, &mut panes, &mut audio_engine, &mut app_frame, &mut active_notes);
+                dispatch::dispatch_action(&Action::Session(SessionAction::Load), &mut state, &mut panes, &mut audio_engine, &mut app_frame, &mut active_notes);
                 continue;
             }
 
@@ -104,12 +104,12 @@ fn run(backend: &mut RatatuiBackend) -> std::io::Result<()> {
                     panes.switch_to(&view.pane_id, &*state);
                 };
 
-                let target = match c {
-                    '1' => Some("strip"),
-                    '2' => Some("piano_roll"),
-                    '3' => Some("sequencer"),
-                    '4' => Some("mixer"),
-                    '5' => Some("server"),
+                let (target, is_push) = match c {
+                    '1' => (Some("strip"), false),
+                    '2' => (Some("piano_roll"), false),
+                    '3' => (Some("sequencer"), false),
+                    '4' => (Some("mixer"), false),
+                    '5' => (Some("server"), false),
                     '`' => {
                         // Back navigation
                         if let Some(back) = app_frame.back_view.take() {
@@ -145,19 +145,23 @@ fn run(backend: &mut RatatuiBackend) -> std::io::Result<()> {
                             if let Some(help) = panes.get_pane_mut::<HelpPane>("help") {
                                 help.set_context(current_id, title, &current_keymap);
                             }
-                            Some("help")
+                            (Some("help"), true)
                         } else {
-                            None
+                            (None, false)
                         }
                     }
-                    _ => None,
+                    _ => (None, false),
                 };
                 if let Some(id) = target {
-                    // Save current view before switching
-                    let current = capture_view(&mut panes, &state);
-                    app_frame.back_view = Some(current);
-                    app_frame.forward_view = None;
-                    panes.switch_to(id, &state);
+                    if is_push {
+                        panes.push_to(id, &state);
+                    } else {
+                        // Save current view before switching
+                        let current = capture_view(&mut panes, &state);
+                        app_frame.back_view = Some(current);
+                        app_frame.forward_view = None;
+                        panes.switch_to(id, &state);
+                    }
                     continue;
                 }
             }

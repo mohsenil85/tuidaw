@@ -1,7 +1,7 @@
 use std::any::Any;
 
 use crate::state::{AppState, CustomSynthDefRegistry, OscType};
-use crate::ui::{Action, Color, FileSelectAction, Graphics, InputEvent, KeyCode, Keymap, Pane, Rect, Style};
+use crate::ui::{Action, Color, FileSelectAction, Graphics, InputEvent, KeyCode, Keymap, NavAction, Pane, Rect, SessionAction, StripAction, Style};
 
 /// Options available in the Add Strip menu
 #[derive(Debug, Clone)]
@@ -256,9 +256,9 @@ impl Pane for AddPane {
             Some("confirm") => {
                 if let Some(option) = self.cached_options.get(self.selected) {
                     match option {
-                        AddOption::OscType(osc) => Action::AddStrip(*osc),
+                        AddOption::OscType(osc) => Action::Strip(StripAction::Add(*osc)),
                         AddOption::ImportCustom => {
-                            Action::OpenFileBrowser(FileSelectAction::ImportCustomSynthDef)
+                            Action::Session(SessionAction::OpenFileBrowser(FileSelectAction::ImportCustomSynthDef))
                         }
                         AddOption::Separator(_) => Action::None,
                     }
@@ -266,7 +266,7 @@ impl Pane for AddPane {
                     Action::None
                 }
             }
-            Some("cancel") => Action::SwitchPane("strip"),
+            Some("cancel") => Action::Nav(NavAction::SwitchPane("strip")),
             Some("next") => {
                 self.select_next();
                 Action::None

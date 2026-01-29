@@ -3,7 +3,7 @@ use std::any::Any;
 use crate::state::music::{Key, Scale};
 use crate::state::AppState;
 use crate::ui::frame::SessionState;
-use crate::ui::{Action, Color, Graphics, InputEvent, KeyCode, Keymap, Pane, Rect, Style};
+use crate::ui::{Action, Color, Graphics, InputEvent, KeyCode, Keymap, NavAction, Pane, Rect, SessionAction, Style};
 use crate::ui::widgets::TextInput;
 
 /// Fields editable in the frame editor
@@ -207,11 +207,11 @@ impl Pane for FrameEditPane {
                     self.editing = true;
                     Action::None
                 } else {
-                    Action::UpdateSession(self.session.clone())
+                    Action::Session(SessionAction::UpdateSession(self.session.clone()))
                 }
             }
             Some("cancel") => {
-                Action::SwitchPane("rack")
+                Action::Nav(NavAction::SwitchPane("rack"))
             }
             _ => Action::None,
         }

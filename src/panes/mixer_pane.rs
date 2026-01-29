@@ -1,7 +1,7 @@
 use std::any::Any;
 
 use crate::state::{AppState, MixerSelection, OutputTarget};
-use crate::ui::{Action, Color, Graphics, InputEvent, KeyCode, Keymap, Pane, Rect, Style};
+use crate::ui::{Action, Color, Graphics, InputEvent, KeyCode, Keymap, MixerAction, Pane, Rect, Style};
 
 const STRIP_WIDTH: u16 = 8;
 const METER_HEIGHT: u16 = 12;
@@ -119,43 +119,43 @@ impl Pane for MixerPane {
 
     fn handle_input(&mut self, event: InputEvent, _state: &AppState) -> Action {
         match self.keymap.lookup(&event) {
-            Some("prev") => { self.send_target = None; Action::MixerMove(-1) }
-            Some("next") => { self.send_target = None; Action::MixerMove(1) }
-            Some("first") => Action::MixerJump(1),
-            Some("last") => Action::MixerJump(-1),
+            Some("prev") => { self.send_target = None; Action::Mixer(MixerAction::Move(-1)) }
+            Some("next") => { self.send_target = None; Action::Mixer(MixerAction::Move(1)) }
+            Some("first") => Action::Mixer(MixerAction::Jump(1)),
+            Some("last") => Action::Mixer(MixerAction::Jump(-1)),
             Some("level_up") => {
                 if let Some(bus_id) = self.send_target {
-                    Action::MixerAdjustSend(bus_id, 0.05)
+                    Action::Mixer(MixerAction::AdjustSend(bus_id, 0.05))
                 } else {
-                    Action::MixerAdjustLevel(0.05)
+                    Action::Mixer(MixerAction::AdjustLevel(0.05))
                 }
             }
             Some("level_down") => {
                 if let Some(bus_id) = self.send_target {
-                    Action::MixerAdjustSend(bus_id, -0.05)
+                    Action::Mixer(MixerAction::AdjustSend(bus_id, -0.05))
                 } else {
-                    Action::MixerAdjustLevel(-0.05)
+                    Action::Mixer(MixerAction::AdjustLevel(-0.05))
                 }
             }
             Some("level_up_big") => {
                 if let Some(bus_id) = self.send_target {
-                    Action::MixerAdjustSend(bus_id, 0.10)
+                    Action::Mixer(MixerAction::AdjustSend(bus_id, 0.10))
                 } else {
-                    Action::MixerAdjustLevel(0.10)
+                    Action::Mixer(MixerAction::AdjustLevel(0.10))
                 }
             }
             Some("level_down_big") => {
                 if let Some(bus_id) = self.send_target {
-                    Action::MixerAdjustSend(bus_id, -0.10)
+                    Action::Mixer(MixerAction::AdjustSend(bus_id, -0.10))
                 } else {
-                    Action::MixerAdjustLevel(-0.10)
+                    Action::Mixer(MixerAction::AdjustLevel(-0.10))
                 }
             }
-            Some("mute") => Action::MixerToggleMute,
-            Some("solo") => Action::MixerToggleSolo,
-            Some("output") => Action::MixerCycleOutput,
-            Some("output_rev") => Action::MixerCycleOutputReverse,
-            Some("section") => { self.send_target = None; Action::MixerCycleSection }
+            Some("mute") => Action::Mixer(MixerAction::ToggleMute),
+            Some("solo") => Action::Mixer(MixerAction::ToggleSolo),
+            Some("output") => Action::Mixer(MixerAction::CycleOutput),
+            Some("output_rev") => Action::Mixer(MixerAction::CycleOutputReverse),
+            Some("section") => { self.send_target = None; Action::Mixer(MixerAction::CycleSection) }
             Some("send_next") => {
                 self.send_target = match self.send_target {
                     None => Some(1),
@@ -174,7 +174,7 @@ impl Pane for MixerPane {
             }
             Some("send_toggle") => {
                 if let Some(bus_id) = self.send_target {
-                    Action::MixerToggleSend(bus_id)
+                    Action::Mixer(MixerAction::ToggleSend(bus_id))
                 } else {
                     Action::None
                 }

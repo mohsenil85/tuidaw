@@ -1,7 +1,7 @@
 use std::any::Any;
 
 use crate::state::AppState;
-use crate::ui::{Action, Color, Graphics, InputEvent, KeyCode, Keymap, Pane, Rect, Style};
+use crate::ui::{Action, Color, Graphics, InputEvent, KeyCode, Keymap, NavAction, Pane, Rect, Style};
 
 pub struct HelpPane {
     keymap: Keymap,
@@ -62,7 +62,7 @@ impl Pane for HelpPane {
 
     fn handle_input(&mut self, event: InputEvent, _state: &AppState) -> Action {
         match self.keymap.lookup(&event) {
-            Some("close") => Action::SwitchPane(self.return_to),
+            Some("close") => Action::Nav(NavAction::PopPane),
             Some("up") => {
                 if self.scroll > 0 {
                     self.scroll -= 1;

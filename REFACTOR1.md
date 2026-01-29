@@ -28,51 +28,23 @@ handler to match the synthdef parameter name.
 
 ---
 
-### 1.3 Sampler automation is a no-op
+### ~~1.3 Sampler automation is a no-op~~ FIXED
 
-**File:** `src/audio/engine.rs:1157-1177`
-
-Both `SamplerRate` and `SamplerAmp` automation handlers loop through
-voice chains but have empty loop bodies:
-
-```rust
-AutomationTarget::SamplerRate(strip_id) => {
-    for voice in &self.voice_chains {
-        if voice.strip_id == *strip_id {
-            // The sampler synth is the second node after MIDI control
-            // Note: This is a simplification; ideally we'd track sampler node IDs
-            // For now, we update via the MIDI node which won't work directly
-            // A proper implementation would need voice-level tracking
-        }
-    }
-}
-```
-
-The root cause is that `VoiceChain` only stores `group_id` and
-`midi_node_id` -- it doesn't track the source/sampler node ID, so
-there's no way to send `/n_set` to the right node.
-
-**Fix:** Add `source_node: i32` to `VoiceChain` (see Architecture
-section).
+Added `source_node: i32` and `spawn_time: Instant` to `VoiceChain`.
+Both `spawn_voice()` and `spawn_sampler_voice()` now store the source
+node ID. `SamplerRate` and `SamplerAmp` automation handlers use
+`voice.source_node` to send `/n_set` to the correct synth node.
+Voice-steal logic also updated to use `spawn_time` for proper
+oldest-voice ordering instead of first-match removal.
 
 ---
 
-### 1.4 `SetStripParam` action is a stub
+### ~~1.4 `SetStripParam` action is a stub~~ FIXED
 
-**File:** `src/dispatch.rs:258-263`
-
-```rust
-Action::SetStripParam(strip_id, ref param, value) => {
-    let _ = strip_id;
-    let _ = param;
-    let _ = value;
-    // TODO: implement real-time param setting on audio engine
-}
-```
-
-The action variant exists, panes can emit it, but the handler
-explicitly discards all arguments. Any UI that relies on real-time
-parameter updates via this action will silently do nothing.
+Implemented the dispatch handler to update `source_params` in state and
+call `AudioEngine::set_source_param()`. The new engine method sets the
+param on the persistent source node (AudioIn strips) and all active
+voice source nodes (oscillator/sampler strips). No graph rebuild needed.
 
 ---
 
@@ -147,12 +119,13 @@ Removed the `SemanticColor` enum and its `impl` block from
 
 Removed the unused `merge()` method from `src/ui/keymap.rs`.
 
-### 2.9 `SequencerPane` is a placeholder
+### 2.9 `SequencerPane` is a placeholder → planned as drum sequencer
 
 **File:** `src/panes/sequencer_pane.rs` (54 lines)
 
-Has a single "quit" keybinding and renders "Coming soon..."
-text. Registered in main.rs and accessible via the `3` key.
+Currently has a single "quit" keybinding and renders "Coming soon..."
+text. Registered in main.rs and accessible via the `3` key. See Part
+4's "Proposed: Drum Sequencer" section for the full design.
 
 ### 2.10 `#[serde(skip)]` annotations on fields that aren't serialized
 
@@ -204,35 +177,15 @@ effect param automation also now correctly counts only enabled effects
 before the target index, fixing a latent bug when disabled effects
 preceded the target.
 
-### Proposed: Richer voice tracking
+### ~~Proposed: Richer voice tracking~~ DONE
 
-Replace:
-
-```rust
-struct VoiceChain {
-    strip_id: StripId,
-    pitch: u8,
-    group_id: i32,
-    midi_node_id: i32,
-}
-```
-
-With:
-
-```rust
-struct VoiceChain {
-    strip_id: StripId,
-    pitch: u8,
-    group_id: i32,
-    midi_node: i32,
-    source_node: i32,    // oscillator or sampler node
-    spawn_time: Instant,  // for voice-steal ordering
-}
-```
-
-Adding `source_node` enables sampler automation (bug 1.3). Adding
-`spawn_time` enables proper oldest-voice stealing instead of always
-removing the first match in the Vec.
+Added `source_node: i32` and `spawn_time: Instant` to `VoiceChain`.
+`source_node` stores the oscillator or sampler synth node ID, enabling
+direct `/n_set` calls for sampler automation. `spawn_time` enables
+proper oldest-voice stealing via `min_by_key` instead of first-match
+`position()`. Both `spawn_voice()` and `spawn_sampler_voice()` updated.
+Field name `midi_node_id` kept as-is (the proposed rename to `midi_node`
+was purely cosmetic).
 
 ### ~~Proposed: Configurable release cleanup~~ DONE
 
@@ -391,6 +344,53 @@ struct PaneManager {
 This enables proper modal dialogs (help overlay, file browser,
 confirmations) that return to the previous context.
 
+### Proposed: Drum Sequencer
+
+Replace the placeholder `SequencerPane` with a 16-step drum sequencer.
+Old school hip hop machine vibes — MPC/SP-1200 workflow in the terminal.
+
+**Core features:**
+
+- **16-step grid, 12 pads** — each row is a pad, each column is a step.
+  Toggle steps on/off with Enter. Cursor navigates the grid.
+- **Sample-per-pad** — each pad loads a WAV or AIFF sample via the
+  existing file browser (`PushPane("file_browser")`). Pads display the
+  sample filename (truncated).
+- **Transport** — play/stop the pattern. Syncs to the global BPM from
+  `SessionState`. Playhead column highlights during playback.
+- **Velocity per step** — Up/Down adjusts velocity of the step under
+  cursor (displayed as brightness or numeric).
+- **Pattern length** — default 16 steps, adjustable (8, 16, 32, 64).
+
+**Sample chopper mode:**
+
+- Load a longer sample, display its waveform (reuse `WAVEFORM_CHARS`
+  from piano roll).
+- Navigate with cursor, set start/end markers to define slices.
+- Assign slices to pads — each pad plays a portion of the source sample.
+- Standard audio formats: WAV, AIFF (via existing audio engine sample
+  loading).
+
+**Builds on existing infrastructure:**
+
+- `SampleRegistry`, `BufferId`, `SamplerConfig` in `state/sampler.rs`
+- File browser pane (push/pop)
+- `AudioEngine::spawn_sampler_voice()` for playback
+- `BusAllocator` for audio routing
+- Piano roll's tick-based timing model
+
+**State additions:**
+
+- `DrumPattern` (steps per pad, velocities, pad→sample mapping)
+- `DrumSequencerState` in `StripState` (current pattern, pad configs)
+- Persistence via SQLite (new tables for patterns and pad configs)
+
+**New actions (in a future `SequencerAction` sub-enum):**
+
+- `ToggleStep`, `SetVelocity`, `SelectPad`, `LoadSample`,
+  `SetPatternLength`, `PlayStop`, `EnterChopperMode`, `SetSlice`,
+  `AssignSliceToPad`
+
 ---
 
 ## Part 5: Priority Order
@@ -432,10 +432,13 @@ confirmations) that return to the previous context.
    `main.rs`, passed to all panes via `&AppState`
 10. ~~**Extract piano keyboard utility**~~ -- done; `PianoKeyboard`
     in `src/ui/piano_keyboard.rs`
-11. **Add `source_node` to `VoiceChain`** -- enables sampler
-    automation (bug 1.3)
-12. **Implement `SetStripParam` action** -- real-time parameter
-    updates from UI (bug 1.4)
+11. ~~**Add `source_node` to `VoiceChain`**~~ -- done; added
+    `source_node` and `spawn_time` fields; sampler automation and
+    oldest-voice stealing now work (bug 1.3 fixed)
+12. ~~**Implement `SetStripParam` action**~~ -- done; dispatch
+    handler updates state and calls `set_source_param()` on audio
+    engine; works for persistent and per-voice source nodes (bug 1.4
+    fixed)
 
 ### Longer-term (cleanup)
 
@@ -448,4 +451,4 @@ confirmations) that return to the previous context.
     architecture.md, and ai-coding-affordances.md
 17. ~~**Remove unused `SemanticColor`**, `Keymap::merge()`~~ -- done;
     serde derives cleanup still outstanding (2.10)
-18. **Remove or implement `SequencerPane`**
+18. **Implement drum sequencer** (see Part 4 design, replaces placeholder SequencerPane)

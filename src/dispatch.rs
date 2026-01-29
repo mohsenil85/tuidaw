@@ -4,7 +4,7 @@ use crate::audio::{self, AudioEngine};
 use crate::panes::{FileBrowserPane, PianoRollPane, ServerPane, StripEditPane};
 use crate::scd_parser;
 use crate::state::{AppState, CustomSynthDef, MixerSelection, ParamSpec, StripState};
-use crate::ui::{Action, Frame, PaneManager};
+use crate::ui::{Action, Frame, MixerAction, PaneManager, PianoRollAction, ServerAction, SessionAction, StripAction};
 
 /// Default path for save file
 pub fn default_rack_path() -> PathBuf {
@@ -29,21 +29,40 @@ pub fn dispatch_action(
 ) -> bool {
     match action {
         Action::Quit => return true,
-        Action::AddStrip(osc_type) => {
+        Action::Nav(_) => {} // Handled by PaneManager
+        Action::Strip(a) => dispatch_strip(a, state, panes, audio_engine, active_notes),
+        Action::Mixer(a) => dispatch_mixer(a, state, audio_engine),
+        Action::PianoRoll(a) => dispatch_piano_roll(a, state, panes, audio_engine, active_notes),
+        Action::Server(a) => dispatch_server(a, panes, audio_engine),
+        Action::Session(a) => dispatch_session(a, state, panes, audio_engine, app_frame),
+        Action::None => {}
+    }
+    false
+}
+
+fn dispatch_strip(
+    action: &StripAction,
+    state: &mut AppState,
+    panes: &mut PaneManager,
+    audio_engine: &mut AudioEngine,
+    active_notes: &mut Vec<(u32, u8, u32)>,
+) {
+    match action {
+        StripAction::Add(osc_type) => {
             state.strip.add_strip(*osc_type);
             if audio_engine.is_running() {
                 let _ = audio_engine.rebuild_strip_routing(&state.strip);
             }
             panes.switch_to("strip", &*state);
         }
-        Action::DeleteStrip(strip_id) => {
+        StripAction::Delete(strip_id) => {
             let strip_id = *strip_id;
             state.strip.remove_strip(strip_id);
             if audio_engine.is_running() {
                 let _ = audio_engine.rebuild_strip_routing(&state.strip);
             }
         }
-        Action::EditStrip(id) => {
+        StripAction::Edit(id) => {
             let strip_data = state.strip.strip(*id).cloned();
             if let Some(strip) = strip_data {
                 if let Some(edit) = panes.get_pane_mut::<StripEditPane>("strip_edit") {
@@ -52,7 +71,7 @@ pub fn dispatch_action(
                 panes.switch_to("strip_edit", &*state);
             }
         }
-        Action::UpdateStrip(id) => {
+        StripAction::Update(id) => {
             let id = *id;
             // Apply edits from strip_edit pane back to the strip
             let edits = panes.get_pane_mut::<StripEditPane>("strip_edit")
@@ -93,163 +112,72 @@ pub fn dispatch_action(
             }
             // Don't switch pane - stay in edit
         }
-        Action::SaveRack => {
-            let path = default_rack_path();
-            if let Some(parent) = path.parent() {
-                let _ = std::fs::create_dir_all(parent);
-            }
-            // Sync session state
-            app_frame.session.time_signature = state.strip.piano_roll.time_signature;
-            if let Err(e) = state.strip.save(&path, &app_frame.session) {
-                eprintln!("Failed to save: {}", e);
-            }
-            let name = path.file_stem()
-                .and_then(|s| s.to_str())
-                .unwrap_or("default")
-                .to_string();
-            app_frame.set_project_name(name);
-        }
-        Action::LoadRack => {
-            let path = default_rack_path();
-            if path.exists() {
-                match StripState::load(&path) {
-                    Ok((loaded_state, loaded_session)) => {
-                        state.strip = loaded_state;
-                        app_frame.session = loaded_session;
-                        let name = path.file_stem()
-                            .and_then(|s| s.to_str())
-                            .unwrap_or("default")
-                            .to_string();
-                        app_frame.set_project_name(name);
-                    }
-                    Err(e) => {
-                        eprintln!("Failed to load: {}", e);
-                    }
+        StripAction::SetParam(strip_id, ref param, value) => {
+            // Update state
+            if let Some(strip) = state.strip.strip_mut(*strip_id) {
+                if let Some(p) = strip.source_params.iter_mut().find(|p| p.name == *param) {
+                    p.value = crate::state::ParamValue::Float(*value);
                 }
             }
+            // Update audio engine in real-time
+            if audio_engine.is_running() {
+                let _ = audio_engine.set_source_param(*strip_id, param, *value);
+            }
         }
-        Action::ConnectServer => {
-            let result = audio_engine.connect("127.0.0.1:57110");
-            if let Some(server) = panes.get_pane_mut::<ServerPane>("server") {
-                match result {
-                    Ok(()) => {
-                        // Load built-in synthdefs
-                        let synthdef_dir = std::path::Path::new("synthdefs");
-                        let builtin_result = audio_engine.load_synthdefs(synthdef_dir);
+        StripAction::PlayNote(pitch, velocity) => {
+            let pitch = *pitch;
+            let velocity = *velocity;
+            // Get the selected strip's id
+            let strip_info: Option<u32> = state.strip.selected_strip().map(|s| s.id);
 
-                        // Also load custom synthdefs from config dir
-                        let config_dir = config_synthdefs_dir();
-                        let custom_result = if config_dir.exists() {
-                            audio_engine.load_synthdefs(&config_dir)
-                        } else {
-                            Ok(())
-                        };
+            if let Some(strip_id) = strip_info {
+                if audio_engine.is_running() {
+                    let vel_f = velocity as f32 / 127.0;
+                    let _ = audio_engine.spawn_voice(strip_id, pitch, vel_f, 0.0, &state.strip);
+                    let duration_ticks = 240;
+                    active_notes.push((strip_id, pitch, duration_ticks));
+                }
+            }
+        }
+        StripAction::SelectNext => {
+            state.strip.select_next();
+        }
+        StripAction::SelectPrev => {
+            state.strip.select_prev();
+        }
+        StripAction::SelectFirst => {
+            if !state.strip.strips.is_empty() {
+                state.strip.selected = Some(0);
+            }
+        }
+        StripAction::SelectLast => {
+            if !state.strip.strips.is_empty() {
+                state.strip.selected = Some(state.strip.strips.len() - 1);
+            }
+        }
+        StripAction::AddEffect(_, _)
+        | StripAction::RemoveEffect(_, _)
+        | StripAction::MoveEffect(_, _, _)
+        | StripAction::SetFilter(_, _)
+        | StripAction::ToggleTrack(_) => {
+            // Reserved for future direct dispatch (currently handled inside StripEditPane)
+        }
+    }
+}
 
-                        match (builtin_result, custom_result) {
-                            (Ok(()), Ok(())) => {
-                                server.set_status(audio::ServerStatus::Connected, "Connected");
-                            }
-                            (Err(e), _) | (_, Err(e)) => {
-                                server.set_status(
-                                    audio::ServerStatus::Connected,
-                                    &format!("Connected (synthdef warning: {})", e),
-                                );
-                            }
-                        }
-
-                        let _ = audio_engine.rebuild_strip_routing(&state.strip);
-                    }
-                    Err(e) => {
-                        server.set_status(audio::ServerStatus::Error, &e.to_string())
-                    }
-                }
-            }
-        }
-        Action::DisconnectServer => {
-            audio_engine.disconnect();
-            if let Some(server) = panes.get_pane_mut::<ServerPane>("server") {
-                server.set_status(audio_engine.status(), "Disconnected");
-                server.set_server_running(audio_engine.server_running());
-            }
-        }
-        Action::StartServer => {
-            let result = audio_engine.start_server();
-            if let Some(server) = panes.get_pane_mut::<ServerPane>("server") {
-                match result {
-                    Ok(()) => {
-                        server.set_status(audio::ServerStatus::Running, "Server started");
-                        server.set_server_running(true);
-                    }
-                    Err(e) => {
-                        server.set_status(audio::ServerStatus::Error, &e);
-                        server.set_server_running(false);
-                    }
-                }
-            }
-        }
-        Action::StopServer => {
-            audio_engine.stop_server();
-            if let Some(server) = panes.get_pane_mut::<ServerPane>("server") {
-                server.set_status(audio::ServerStatus::Stopped, "Server stopped");
-                server.set_server_running(false);
-            }
-        }
-        Action::CompileSynthDefs => {
-            let scd_path = std::path::Path::new("synthdefs/compile.scd");
-            match audio_engine.compile_synthdefs_async(scd_path) {
-                Ok(()) => {
-                    if let Some(server) = panes.get_pane_mut::<ServerPane>("server") {
-                        server.set_status(audio_engine.status(), "Compiling synthdefs...");
-                    }
-                }
-                Err(e) => {
-                    if let Some(server) = panes.get_pane_mut::<ServerPane>("server") {
-                        server.set_status(audio_engine.status(), &e);
-                    }
-                }
-            }
-        }
-        Action::LoadSynthDefs => {
-            // Load built-in synthdefs
-            let synthdef_dir = std::path::Path::new("synthdefs");
-            let builtin_result = audio_engine.load_synthdefs(synthdef_dir);
-
-            // Also load custom synthdefs from config dir
-            let config_dir = config_synthdefs_dir();
-            let custom_result = if config_dir.exists() {
-                audio_engine.load_synthdefs(&config_dir)
-            } else {
-                Ok(())
-            };
-
-            if let Some(server) = panes.get_pane_mut::<ServerPane>("server") {
-                match (builtin_result, custom_result) {
-                    (Ok(()), Ok(())) => {
-                        server.set_status(audio_engine.status(), "Synthdefs loaded (built-in + custom)");
-                    }
-                    (Err(e), _) => {
-                        server.set_status(audio_engine.status(), &format!("Error loading built-in: {}", e));
-                    }
-                    (_, Err(e)) => {
-                        server.set_status(audio_engine.status(), &format!("Error loading custom: {}", e));
-                    }
-                }
-            }
-        }
-        Action::SetStripParam(strip_id, ref param, value) => {
-            // Real-time param update - update state and audio
-            let _ = strip_id;
-            let _ = param;
-            let _ = value;
-            // TODO: implement real-time param setting on audio engine
-        }
-        Action::MixerMove(delta) => {
+fn dispatch_mixer(
+    action: &MixerAction,
+    state: &mut AppState,
+    audio_engine: &mut AudioEngine,
+) {
+    match action {
+        MixerAction::Move(delta) => {
             state.strip.mixer_move(*delta);
         }
-        Action::MixerJump(direction) => {
+        MixerAction::Jump(direction) => {
             state.strip.mixer_jump(*direction);
         }
-        Action::MixerAdjustLevel(delta) => {
+        MixerAction::AdjustLevel(delta) => {
             let mut bus_update: Option<(u8, f32, bool, f32)> = None;
             {
                 let ss = &mut state.strip;
@@ -280,7 +208,7 @@ pub fn dispatch_action(
                 let _ = audio_engine.update_all_strip_mixer_params(&state.strip);
             }
         }
-        Action::MixerToggleMute => {
+        MixerAction::ToggleMute => {
             let mut bus_update: Option<(u8, f32, bool, f32)> = None;
             {
                 let ss = &mut state.strip;
@@ -311,7 +239,7 @@ pub fn dispatch_action(
                 let _ = audio_engine.update_all_strip_mixer_params(&state.strip);
             }
         }
-        Action::MixerToggleSolo => {
+        MixerAction::ToggleSolo => {
             let mut bus_updates: Vec<(u8, f32, bool, f32)> = Vec::new();
             {
                 let ss = &mut state.strip;
@@ -340,16 +268,16 @@ pub fn dispatch_action(
                 let _ = audio_engine.update_all_strip_mixer_params(&state.strip);
             }
         }
-        Action::MixerCycleSection => {
+        MixerAction::CycleSection => {
             state.strip.mixer_cycle_section();
         }
-        Action::MixerCycleOutput => {
+        MixerAction::CycleOutput => {
             state.strip.mixer_cycle_output();
         }
-        Action::MixerCycleOutputReverse => {
+        MixerAction::CycleOutputReverse => {
             state.strip.mixer_cycle_output_reverse();
         }
-        Action::MixerAdjustSend(bus_id, delta) => {
+        MixerAction::AdjustSend(bus_id, delta) => {
             let bus_id = *bus_id;
             let delta = *delta;
             let ss = &mut state.strip;
@@ -361,7 +289,7 @@ pub fn dispatch_action(
                 }
             }
         }
-        Action::MixerToggleSend(bus_id) => {
+        MixerAction::ToggleSend(bus_id) => {
             let bus_id = *bus_id;
             {
                 let ss = &mut state.strip;
@@ -380,7 +308,18 @@ pub fn dispatch_action(
                 let _ = audio_engine.rebuild_strip_routing(&state.strip);
             }
         }
-        Action::PianoRollToggleNote => {
+    }
+}
+
+fn dispatch_piano_roll(
+    action: &PianoRollAction,
+    state: &mut AppState,
+    panes: &mut PaneManager,
+    audio_engine: &mut AudioEngine,
+    active_notes: &mut Vec<(u32, u8, u32)>,
+) {
+    match action {
+        PianoRollAction::ToggleNote => {
             if let Some(pr_pane) = panes.get_pane_mut::<PianoRollPane>("piano_roll") {
                 let pitch = pr_pane.cursor_pitch();
                 let tick = pr_pane.cursor_tick();
@@ -390,19 +329,19 @@ pub fn dispatch_action(
                 state.strip.piano_roll.toggle_note(track, pitch, tick, dur, vel);
             }
         }
-        Action::PianoRollAdjustDuration(delta) => {
+        PianoRollAction::AdjustDuration(delta) => {
             let delta = *delta;
             if let Some(pr_pane) = panes.get_pane_mut::<PianoRollPane>("piano_roll") {
                 pr_pane.adjust_default_duration(delta);
             }
         }
-        Action::PianoRollAdjustVelocity(delta) => {
+        PianoRollAction::AdjustVelocity(delta) => {
             let delta = *delta;
             if let Some(pr_pane) = panes.get_pane_mut::<PianoRollPane>("piano_roll") {
                 pr_pane.adjust_default_velocity(delta);
             }
         }
-        Action::PianoRollPlayStop => {
+        PianoRollAction::PlayStop => {
             let pr = &mut state.strip.piano_roll;
             pr.playing = !pr.playing;
             if !pr.playing {
@@ -417,7 +356,7 @@ pub fn dispatch_action(
                 pr_pane.set_recording(false);
             }
         }
-        Action::PianoRollPlayStopRecord => {
+        PianoRollAction::PlayStopRecord => {
             let is_playing = state.strip.piano_roll.playing;
 
             if !is_playing {
@@ -440,29 +379,29 @@ pub fn dispatch_action(
                 }
             }
         }
-        Action::PianoRollToggleLoop => {
+        PianoRollAction::ToggleLoop => {
             state.strip.piano_roll.looping = !state.strip.piano_roll.looping;
         }
-        Action::PianoRollSetLoopStart => {
+        PianoRollAction::SetLoopStart => {
             if let Some(pr_pane) = panes.get_pane_mut::<PianoRollPane>("piano_roll") {
                 let tick = pr_pane.cursor_tick();
                 state.strip.piano_roll.loop_start = tick;
             }
         }
-        Action::PianoRollSetLoopEnd => {
+        PianoRollAction::SetLoopEnd => {
             if let Some(pr_pane) = panes.get_pane_mut::<PianoRollPane>("piano_roll") {
                 let tick = pr_pane.cursor_tick();
                 state.strip.piano_roll.loop_end = tick;
             }
         }
-        Action::PianoRollChangeTrack(delta) => {
+        PianoRollAction::ChangeTrack(delta) => {
             let delta = *delta;
             let track_count = state.strip.piano_roll.track_order.len();
             if let Some(pr_pane) = panes.get_pane_mut::<PianoRollPane>("piano_roll") {
                 pr_pane.change_track(delta, track_count);
             }
         }
-        Action::PianoRollCycleTimeSig => {
+        PianoRollAction::CycleTimeSig => {
             let pr = &mut state.strip.piano_roll;
             pr.time_signature = match pr.time_signature {
                 (4, 4) => (3, 4),
@@ -472,7 +411,7 @@ pub fn dispatch_action(
                 _ => (4, 4),
             };
         }
-        Action::PianoRollTogglePolyMode => {
+        PianoRollAction::TogglePolyMode => {
             let track_idx = panes
                 .get_pane_mut::<PianoRollPane>("piano_roll")
                 .map(|pr| pr.current_track());
@@ -482,12 +421,12 @@ pub fn dispatch_action(
                 }
             }
         }
-        Action::PianoRollJump(_direction) => {
+        PianoRollAction::Jump(_direction) => {
             if let Some(pr_pane) = panes.get_pane_mut::<PianoRollPane>("piano_roll") {
                 pr_pane.jump_to_end();
             }
         }
-        Action::PianoRollPlayNote(pitch, velocity) => {
+        PianoRollAction::PlayNote(pitch, velocity) => {
             let pitch = *pitch;
             let velocity = *velocity;
             // Get the current track's strip_id
@@ -521,50 +460,186 @@ pub fn dispatch_action(
                 }
             }
         }
-        Action::StripPlayNote(pitch, velocity) => {
-            let pitch = *pitch;
-            let velocity = *velocity;
-            // Get the selected strip's id
-            let strip_info: Option<u32> = state.strip.selected_strip().map(|s| s.id);
+        PianoRollAction::MoveCursor(_, _)
+        | PianoRollAction::SetBpm(_)
+        | PianoRollAction::Zoom(_)
+        | PianoRollAction::ScrollOctave(_) => {
+            // Reserved for future direct dispatch (currently handled inside PianoRollPane)
+        }
+    }
+}
 
-            if let Some(strip_id) = strip_info {
-                if audio_engine.is_running() {
-                    let vel_f = velocity as f32 / 127.0;
-                    let _ = audio_engine.spawn_voice(strip_id, pitch, vel_f, 0.0, &state.strip);
-                    let duration_ticks = 240;
-                    active_notes.push((strip_id, pitch, duration_ticks));
+fn dispatch_server(
+    action: &ServerAction,
+    panes: &mut PaneManager,
+    audio_engine: &mut AudioEngine,
+) {
+    match action {
+        ServerAction::Connect => {
+            let result = audio_engine.connect("127.0.0.1:57110");
+            if let Some(server) = panes.get_pane_mut::<ServerPane>("server") {
+                match result {
+                    Ok(()) => {
+                        // Load built-in synthdefs
+                        let synthdef_dir = std::path::Path::new("synthdefs");
+                        let builtin_result = audio_engine.load_synthdefs(synthdef_dir);
+
+                        // Also load custom synthdefs from config dir
+                        let config_dir = config_synthdefs_dir();
+                        let custom_result = if config_dir.exists() {
+                            audio_engine.load_synthdefs(&config_dir)
+                        } else {
+                            Ok(())
+                        };
+
+                        match (builtin_result, custom_result) {
+                            (Ok(()), Ok(())) => {
+                                server.set_status(audio::ServerStatus::Connected, "Connected");
+                            }
+                            (Err(e), _) | (_, Err(e)) => {
+                                server.set_status(
+                                    audio::ServerStatus::Connected,
+                                    &format!("Connected (synthdef warning: {})", e),
+                                );
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        server.set_status(audio::ServerStatus::Error, &e.to_string())
+                    }
                 }
             }
         }
-        Action::StripSelectNext => {
-            state.strip.select_next();
-        }
-        Action::StripSelectPrev => {
-            state.strip.select_prev();
-        }
-        Action::StripSelectFirst => {
-            if !state.strip.strips.is_empty() {
-                state.strip.selected = Some(0);
+        ServerAction::Disconnect => {
+            audio_engine.disconnect();
+            if let Some(server) = panes.get_pane_mut::<ServerPane>("server") {
+                server.set_status(audio_engine.status(), "Disconnected");
+                server.set_server_running(audio_engine.server_running());
             }
         }
-        Action::StripSelectLast => {
-            if !state.strip.strips.is_empty() {
-                state.strip.selected = Some(state.strip.strips.len() - 1);
+        ServerAction::Start => {
+            let result = audio_engine.start_server();
+            if let Some(server) = panes.get_pane_mut::<ServerPane>("server") {
+                match result {
+                    Ok(()) => {
+                        server.set_status(audio::ServerStatus::Running, "Server started");
+                        server.set_server_running(true);
+                    }
+                    Err(e) => {
+                        server.set_status(audio::ServerStatus::Error, &e);
+                        server.set_server_running(false);
+                    }
+                }
             }
         }
-        Action::UpdateSession(ref session) => {
+        ServerAction::Stop => {
+            audio_engine.stop_server();
+            if let Some(server) = panes.get_pane_mut::<ServerPane>("server") {
+                server.set_status(audio::ServerStatus::Stopped, "Server stopped");
+                server.set_server_running(false);
+            }
+        }
+        ServerAction::CompileSynthDefs => {
+            let scd_path = std::path::Path::new("synthdefs/compile.scd");
+            match audio_engine.compile_synthdefs_async(scd_path) {
+                Ok(()) => {
+                    if let Some(server) = panes.get_pane_mut::<ServerPane>("server") {
+                        server.set_status(audio_engine.status(), "Compiling synthdefs...");
+                    }
+                }
+                Err(e) => {
+                    if let Some(server) = panes.get_pane_mut::<ServerPane>("server") {
+                        server.set_status(audio_engine.status(), &e);
+                    }
+                }
+            }
+        }
+        ServerAction::LoadSynthDefs => {
+            // Load built-in synthdefs
+            let synthdef_dir = std::path::Path::new("synthdefs");
+            let builtin_result = audio_engine.load_synthdefs(synthdef_dir);
+
+            // Also load custom synthdefs from config dir
+            let config_dir = config_synthdefs_dir();
+            let custom_result = if config_dir.exists() {
+                audio_engine.load_synthdefs(&config_dir)
+            } else {
+                Ok(())
+            };
+
+            if let Some(server) = panes.get_pane_mut::<ServerPane>("server") {
+                match (builtin_result, custom_result) {
+                    (Ok(()), Ok(())) => {
+                        server.set_status(audio_engine.status(), "Synthdefs loaded (built-in + custom)");
+                    }
+                    (Err(e), _) => {
+                        server.set_status(audio_engine.status(), &format!("Error loading built-in: {}", e));
+                    }
+                    (_, Err(e)) => {
+                        server.set_status(audio_engine.status(), &format!("Error loading custom: {}", e));
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn dispatch_session(
+    action: &SessionAction,
+    state: &mut AppState,
+    panes: &mut PaneManager,
+    audio_engine: &mut AudioEngine,
+    app_frame: &mut Frame,
+) {
+    match action {
+        SessionAction::Save => {
+            let path = default_rack_path();
+            if let Some(parent) = path.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            // Sync session state
+            app_frame.session.time_signature = state.strip.piano_roll.time_signature;
+            if let Err(e) = state.strip.save(&path, &app_frame.session) {
+                eprintln!("Failed to save: {}", e);
+            }
+            let name = path.file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("default")
+                .to_string();
+            app_frame.set_project_name(name);
+        }
+        SessionAction::Load => {
+            let path = default_rack_path();
+            if path.exists() {
+                match StripState::load(&path) {
+                    Ok((loaded_state, loaded_session)) => {
+                        state.strip = loaded_state;
+                        app_frame.session = loaded_session;
+                        let name = path.file_stem()
+                            .and_then(|s| s.to_str())
+                            .unwrap_or("default")
+                            .to_string();
+                        app_frame.set_project_name(name);
+                    }
+                    Err(e) => {
+                        eprintln!("Failed to load: {}", e);
+                    }
+                }
+            }
+        }
+        SessionAction::UpdateSession(ref session) => {
             app_frame.session = session.clone();
             state.strip.piano_roll.time_signature = session.time_signature;
             state.strip.piano_roll.bpm = session.bpm as f32;
             panes.switch_to("strip", &*state);
         }
-        Action::OpenFileBrowser(ref file_action) => {
+        SessionAction::OpenFileBrowser(ref file_action) => {
             if let Some(fb) = panes.get_pane_mut::<FileBrowserPane>("file_browser") {
                 fb.open_for(file_action.clone(), None);
             }
-            panes.switch_to("file_browser", &*state);
+            panes.push_to("file_browser", &*state);
         }
-        Action::ImportCustomSynthDef(ref path) => {
+        SessionAction::ImportCustomSynthDef(ref path) => {
             // Read and parse the .scd file
             match std::fs::read_to_string(path) {
                 Ok(content) => {
@@ -624,24 +699,22 @@ pub fn dispatch_action(
                                 }
                             }
 
-                            // Switch back to add pane
-                            panes.switch_to("add", &*state);
+                            // Pop back to the pane that opened the file browser
+                            panes.pop(&*state);
                         }
                         Err(e) => {
                             eprintln!("Failed to parse .scd file: {}", e);
-                            panes.switch_to("add", &*state);
+                            panes.pop(&*state);
                         }
                     }
                 }
                 Err(e) => {
                     eprintln!("Failed to read .scd file: {}", e);
-                    panes.switch_to("add", &*state);
+                    panes.pop(&*state);
                 }
             }
         }
-        _ => {}
     }
-    false
 }
 
 /// Get the config directory for custom synthdefs

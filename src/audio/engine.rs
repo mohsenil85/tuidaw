@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::mpsc::{self, Receiver};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use super::bus_allocator::BusAllocator;
 use super::osc_client::OscClient;
@@ -36,6 +36,8 @@ pub struct VoiceChain {
     pub pitch: u8,
     pub group_id: i32,
     pub midi_node_id: i32,
+    pub source_node: i32,
+    pub spawn_time: Instant,
 }
 
 #[derive(Debug, Clone)]
@@ -644,6 +646,29 @@ impl AudioEngine {
         Ok(())
     }
 
+    /// Set a source parameter on a strip in real-time.
+    /// Updates the persistent source node (AudioIn) and all active voice source nodes.
+    pub fn set_source_param(&self, strip_id: StripId, param: &str, value: f32) -> Result<(), String> {
+        if !self.is_running { return Ok(()); }
+        let client = self.client.as_ref().ok_or("Not connected")?;
+
+        // Set on persistent source node (AudioIn strips)
+        if let Some(nodes) = self.node_map.get(&strip_id) {
+            if let Some(source_node) = nodes.source {
+                let _ = client.set_param(source_node, param, value);
+            }
+        }
+
+        // Set on all active voice source nodes (oscillator/sampler strips)
+        for voice in &self.voice_chains {
+            if voice.strip_id == strip_id {
+                let _ = client.set_param(voice.source_node, param, value);
+            }
+        }
+
+        Ok(())
+    }
+
     /// Spawn a voice for a strip
     pub fn spawn_voice(
         &mut self,
@@ -668,10 +693,15 @@ impl AudioEngine {
 
         let client = self.client.as_ref().ok_or("Not connected")?;
 
-        // Voice-steal: if at limit, free oldest
+        // Voice-steal: if at limit, free oldest by spawn_time
         let count = self.voice_chains.iter().filter(|v| v.strip_id == strip_id).count();
         if count >= MAX_VOICES_PER_STRIP {
-            if let Some(pos) = self.voice_chains.iter().position(|v| v.strip_id == strip_id) {
+            if let Some(pos) = self.voice_chains.iter()
+                .enumerate()
+                .filter(|(_, v)| v.strip_id == strip_id)
+                .min_by_key(|(_, v)| v.spawn_time)
+                .map(|(i, _)| i)
+            {
                 let old = self.voice_chains.remove(pos);
                 let _ = client.free_node(old.group_id);
             }
@@ -790,6 +820,8 @@ impl AudioEngine {
             pitch,
             group_id,
             midi_node_id,
+            source_node: osc_node_id,
+            spawn_time: Instant::now(),
         });
 
         Ok(())
@@ -824,10 +856,15 @@ impl AudioEngine {
 
         let client = self.client.as_ref().ok_or("Not connected")?;
 
-        // Voice-steal: if at limit, free oldest
+        // Voice-steal: if at limit, free oldest by spawn_time
         let count = self.voice_chains.iter().filter(|v| v.strip_id == strip_id).count();
         if count >= MAX_VOICES_PER_STRIP {
-            if let Some(pos) = self.voice_chains.iter().position(|v| v.strip_id == strip_id) {
+            if let Some(pos) = self.voice_chains.iter()
+                .enumerate()
+                .filter(|(_, v)| v.strip_id == strip_id)
+                .min_by_key(|(_, v)| v.spawn_time)
+                .map(|(i, _)| i)
+            {
                 let old = self.voice_chains.remove(pos);
                 let _ = client.free_node(old.group_id);
             }
@@ -976,6 +1013,8 @@ impl AudioEngine {
             pitch,
             group_id,
             midi_node_id,
+            source_node: sampler_node_id,
+            spawn_time: Instant::now(),
         });
 
         Ok(())
@@ -1183,23 +1222,18 @@ impl AudioEngine {
                 }
             }
             AutomationTarget::SamplerRate(strip_id) => {
-                // For sampler rate, we need to set it on all active voices for this strip
                 for voice in &self.voice_chains {
                     if voice.strip_id == *strip_id {
-                        // The sampler synth is the second node after MIDI control
-                        // Set rate on the voice group's sampler synth
-                        // Note: This is a simplification; ideally we'd track sampler node IDs
-                        // For now, we update via the MIDI node which won't work directly
-                        // A proper implementation would need voice-level tracking
+                        client.set_param(voice.source_node, "rate", value)
+                            .map_err(|e| e.to_string())?;
                     }
                 }
-                // Alternative: Update through source params (will affect next spawned voice)
             }
             AutomationTarget::SamplerAmp(strip_id) => {
-                // Similar to SamplerRate - affects voices
                 for voice in &self.voice_chains {
                     if voice.strip_id == *strip_id {
-                        // Would need proper voice tracking
+                        client.set_param(voice.source_node, "amp", value)
+                            .map_err(|e| e.to_string())?;
                     }
                 }
             }

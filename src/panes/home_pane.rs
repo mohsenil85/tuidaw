@@ -1,7 +1,7 @@
 use std::any::Any;
 
 use crate::state::AppState;
-use crate::ui::{Action, Color, Graphics, InputEvent, KeyCode, Keymap, Pane, Rect, Style};
+use crate::ui::{Action, Color, Graphics, InputEvent, KeyCode, Keymap, NavAction, Pane, Rect, Style};
 
 /// Menu item for the home screen
 struct MenuItem {
@@ -76,7 +76,7 @@ impl Pane for HomePane {
                 }
                 Action::None
             }
-            Some("select") => Action::SwitchPane(self.items[self.selected].pane_id),
+            Some("select") => Action::Nav(NavAction::SwitchPane(self.items[self.selected].pane_id)),
             Some("quit") => Action::Quit,
             _ => Action::None,
         }

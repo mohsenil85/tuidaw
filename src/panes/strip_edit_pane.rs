@@ -5,7 +5,7 @@ use crate::state::{
     OscType, Param, ParamValue, StripId, Strip,
 };
 use crate::ui::widgets::TextInput;
-use crate::ui::{Action, Color, Graphics, InputEvent, KeyCode, Keymap, Pane, PianoKeyboard, Rect, Style};
+use crate::ui::{Action, Color, Graphics, InputEvent, KeyCode, Keymap, Pane, PianoKeyboard, Rect, StripAction, Style};
 
 /// Which section a row belongs to
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -265,7 +265,7 @@ impl StripEditPane {
 
     fn emit_update(&self) -> Action {
         if let Some(id) = self.strip_id {
-            Action::UpdateStrip(id)
+            Action::Strip(StripAction::Update(id))
         } else {
             Action::None
         }
@@ -469,7 +469,7 @@ impl Pane for StripEditPane {
                 KeyCode::Char(c) => {
                     if let Some(pitch) = self.piano.key_to_pitch(c) {
                         let velocity = if event.modifiers.shift { 127 } else { 100 };
-                        return Action::StripPlayNote(pitch, velocity);
+                        return Action::Strip(StripAction::PlayNote(pitch, velocity));
                     }
                     return Action::None;
                 }

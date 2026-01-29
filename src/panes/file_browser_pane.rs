@@ -4,7 +4,8 @@ use std::path::PathBuf;
 
 use crate::state::AppState;
 use crate::ui::{
-    Action, Color, FileSelectAction, Graphics, InputEvent, KeyCode, Keymap, Pane, Rect, Style,
+    Action, Color, FileSelectAction, Graphics, InputEvent, KeyCode, Keymap, NavAction, Pane, Rect,
+    SessionAction, Style,
 };
 
 struct DirEntry {
@@ -154,7 +155,7 @@ impl Pane for FileBrowserPane {
                         // File selected
                         match self.on_select_action {
                             FileSelectAction::ImportCustomSynthDef => {
-                                Action::ImportCustomSynthDef(entry.path.clone())
+                                Action::Session(SessionAction::ImportCustomSynthDef(entry.path.clone()))
                             }
                         }
                     }
@@ -162,7 +163,7 @@ impl Pane for FileBrowserPane {
                     Action::None
                 }
             }
-            Some("cancel") => Action::SwitchPane("add"),
+            Some("cancel") => Action::Nav(NavAction::PopPane),
             Some("parent") => {
                 if let Some(parent) = self.current_dir.parent() {
                     self.current_dir = parent.to_path_buf();
