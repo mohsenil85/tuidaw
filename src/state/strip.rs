@@ -345,7 +345,7 @@ pub struct EnvConfig {
 
 impl Default for EnvConfig {
     fn default() -> Self {
-        Self { attack: 0.01, decay: 0.1, sustain: 0.7, release: 0.3 }
+        Self { attack: 0.01, decay: 0.1, sustain: 0.0, release: 0.3 }
     }
 }
 

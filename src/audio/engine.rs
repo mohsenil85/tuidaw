@@ -82,8 +82,6 @@ pub struct AudioEngine {
     next_voice_audio_bus: i32,
     /// Next available voice bus (control)
     next_voice_control_bus: i32,
-    /// Next group ID for voice groups
-    next_group_id: i32,
     /// Meter synth node ID
     meter_node_id: Option<i32>,
     /// Sample buffer mapping: BufferId -> SuperCollider buffer number
@@ -111,7 +109,6 @@ impl AudioEngine {
             voice_chains: Vec::new(),
             next_voice_audio_bus: 16,
             next_voice_control_bus: 0,
-            next_group_id: 1000,
             meter_node_id: None,
             buffer_map: HashMap::new(),
             next_bufnum: 100, // Start at 100 to avoid conflicts with built-in buffers
@@ -614,12 +611,6 @@ impl AudioEngine {
         // (Re)create meter synth
         self.restart_meter();
 
-        // Sync group IDs with node IDs AFTER all node allocations to avoid
-        // collisions in SuperCollider's shared ID namespace (synths and groups
-        // share one ID space — if next_group_id overlaps with bus output or
-        // meter node IDs, spawn_voice's /g_new silently fails).
-        self.next_group_id = self.next_node_id;
-
         Ok(())
     }
 
@@ -690,8 +681,8 @@ impl AudioEngine {
         let source_out_bus = self.bus_allocator.get_audio_bus(strip_id, "source_out").unwrap_or(16);
 
         // Create a group for this voice chain
-        let group_id = self.next_group_id;
-        self.next_group_id += 1;
+        let group_id = self.next_node_id;
+        self.next_node_id += 1;
 
         // Allocate per-voice control buses
         let voice_freq_bus = self.next_voice_control_bus;
@@ -846,8 +837,8 @@ impl AudioEngine {
         let source_out_bus = self.bus_allocator.get_audio_bus(strip_id, "source_out").unwrap_or(16);
 
         // Create a group for this voice chain
-        let group_id = self.next_group_id;
-        self.next_group_id += 1;
+        let group_id = self.next_node_id;
+        self.next_node_id += 1;
 
         // Allocate per-voice control buses
         let voice_freq_bus = self.next_voice_control_bus;
