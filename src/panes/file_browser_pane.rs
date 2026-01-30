@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use crate::state::AppState;
 use crate::ui::{
-    Action, Color, FileSelectAction, Graphics, InputEvent, KeyCode, Keymap, NavAction, Pane, Rect,
+    Action, ChopperAction, Color, FileSelectAction, Graphics, InputEvent, KeyCode, Keymap, NavAction, Pane, Rect,
     SequencerAction, SessionAction, Style,
 };
 
@@ -58,7 +58,7 @@ impl FileBrowserPane {
         self.on_select_action = action.clone();
         self.filter_extensions = match action {
             FileSelectAction::ImportCustomSynthDef => Some(vec!["scd".to_string()]),
-            FileSelectAction::LoadDrumSample(_) => {
+            FileSelectAction::LoadDrumSample(_) | FileSelectAction::LoadChopperSample => {
                 Some(vec!["wav".to_string(), "aiff".to_string(), "aif".to_string()])
             }
         };
@@ -156,6 +156,9 @@ impl Pane for FileBrowserPane {
                             FileSelectAction::LoadDrumSample(pad_idx) => {
                                 Action::Sequencer(SequencerAction::LoadSampleResult(pad_idx, entry.path.clone()))
                             }
+                            FileSelectAction::LoadChopperSample => {
+                                Action::Chopper(ChopperAction::LoadSampleResult(entry.path.clone()))
+                            }
                         }
                     }
                 } else {
@@ -214,7 +217,7 @@ impl Pane for FileBrowserPane {
 
         let title = match self.on_select_action {
             FileSelectAction::ImportCustomSynthDef => " Import Custom SynthDef ",
-            FileSelectAction::LoadDrumSample(_) => " Load Sample ",
+            FileSelectAction::LoadDrumSample(_) | FileSelectAction::LoadChopperSample => " Load Sample ",
         };
         g.set_style(Style::new().fg(Color::PURPLE));
         g.draw_box(rect, Some(title));

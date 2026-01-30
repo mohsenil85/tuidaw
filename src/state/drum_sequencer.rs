@@ -1,10 +1,22 @@
-use super::sampler::BufferId;
+use super::sampler::{BufferId, Slice, SliceId};
 
 pub const NUM_PADS: usize = 12;
 #[allow(dead_code)]
 pub const MAX_STEPS: usize = 64;
 pub const DEFAULT_STEPS: usize = 16;
 pub const NUM_PATTERNS: usize = 4;
+
+#[derive(Debug, Clone)]
+pub struct ChopperState {
+    pub buffer_id: Option<BufferId>,
+    pub path: Option<String>,
+    pub name: String,
+    pub slices: Vec<Slice>,
+    pub selected_slice: usize,
+    pub next_slice_id: SliceId,
+    pub waveform_peaks: Vec<f32>,
+    pub duration_secs: f32,
+}
 
 #[derive(Debug, Clone)]
 pub struct DrumStep {
@@ -27,6 +39,8 @@ pub struct DrumPad {
     pub path: Option<String>,
     pub name: String,
     pub level: f32, // 0.0-1.0, default 0.8
+    pub slice_start: f32, // 0.0-1.0, default 0.0
+    pub slice_end: f32,   // 0.0-1.0, default 1.0
 }
 
 impl Default for DrumPad {
@@ -36,6 +50,8 @@ impl Default for DrumPad {
             path: None,
             name: String::new(),
             level: 0.8,
+            slice_start: 0.0,
+            slice_end: 1.0,
         }
     }
 }
@@ -67,6 +83,7 @@ pub struct DrumSequencerState {
     pub next_buffer_id: BufferId,
     pub step_accumulator: f32,
     pub last_played_step: Option<usize>,
+    pub chopper: Option<ChopperState>,
 }
 
 impl DrumSequencerState {
@@ -82,6 +99,7 @@ impl DrumSequencerState {
             next_buffer_id: 10000,
             step_accumulator: 0.0,
             last_played_step: None,
+            chopper: None,
         }
     }
 

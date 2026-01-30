@@ -12,7 +12,7 @@ mod ui;
 use std::time::{Duration, Instant};
 
 use audio::AudioEngine;
-use panes::{AddPane, FileBrowserPane, FrameEditPane, HelpPane, HomePane, InstrumentEditPane, InstrumentPane, MixerPane, PianoRollPane, SequencerPane, ServerPane};
+use panes::{AddPane, FileBrowserPane, FrameEditPane, HelpPane, HomePane, InstrumentEditPane, InstrumentPane, MixerPane, PianoRollPane, SampleChopperPane, SequencerPane, ServerPane};
 use state::AppState;
 use ui::{
     Action, Frame, InputSource, KeyCode, PaneManager, RatatuiBackend, SessionAction, ViewState,
@@ -40,6 +40,7 @@ fn run(backend: &mut RatatuiBackend) -> std::io::Result<()> {
     panes.add_pane(Box::new(PianoRollPane::new()));
     panes.add_pane(Box::new(SequencerPane::new()));
     panes.add_pane(Box::new(FrameEditPane::new()));
+    panes.add_pane(Box::new(SampleChopperPane::new()));
     panes.add_pane(Box::new(FileBrowserPane::new()));
 
     let mut audio_engine = AudioEngine::new();

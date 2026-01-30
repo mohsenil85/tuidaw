@@ -14,7 +14,7 @@ pub use graphics::{Graphics, Rect};
 pub use input::{InputEvent, InputSource, KeyCode, Modifiers};
 pub use keymap::Keymap;
 pub use pad_keyboard::PadKeyboard;
-pub use pane::{Action, FileSelectAction, InstrumentAction, MixerAction, NavAction, Pane, PaneManager, PianoRollAction, SequencerAction, ServerAction, SessionAction};
+pub use pane::{Action, ChopperAction, FileSelectAction, InstrumentAction, MixerAction, NavAction, Pane, PaneManager, PianoRollAction, SequencerAction, ServerAction, SessionAction};
 pub use piano_keyboard::PianoKeyboard;
 pub use ratatui_impl::RatatuiBackend;
 pub use style::{Color, Style};

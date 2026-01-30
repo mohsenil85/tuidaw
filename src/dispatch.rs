@@ -3,9 +3,10 @@ use std::path::PathBuf;
 use crate::audio::{self, AudioEngine};
 use crate::panes::{FileBrowserPane, InstrumentEditPane, PianoRollPane, ServerPane};
 use crate::scd_parser;
-use crate::state::drum_sequencer::DrumPattern;
+use crate::state::drum_sequencer::{ChopperState, DrumPattern};
+use crate::state::sampler::Slice;
 use crate::state::{AppState, CustomSynthDef, MixerSelection, ParamSpec};
-use crate::ui::{Action, Frame, InstrumentAction, MixerAction, PaneManager, PianoRollAction, SequencerAction, ServerAction, SessionAction};
+use crate::ui::{Action, ChopperAction, Frame, InstrumentAction, MixerAction, PaneManager, PianoRollAction, SequencerAction, ServerAction, SessionAction};
 
 /// Default path for save file
 pub fn default_rack_path() -> PathBuf {
@@ -37,6 +38,7 @@ pub fn dispatch_action(
         Action::Server(a) => dispatch_server(a, state, panes, audio_engine),
         Action::Session(a) => dispatch_session(a, state, panes, audio_engine, app_frame),
         Action::Sequencer(a) => dispatch_sequencer(a, state, panes, audio_engine),
+        Action::Chopper(a) => dispatch_chopper(a, state, panes, audio_engine),
         Action::None => {}
     }
     false
@@ -166,6 +168,7 @@ fn dispatch_instrument(
                             if audio_engine.is_running() {
                                 let _ = audio_engine.play_drum_hit_to_instrument(
                                     buffer_id, amp, instrument_id,
+                                    pad.slice_start, pad.slice_end,
                                 );
                             }
                         }
@@ -868,6 +871,236 @@ fn dispatch_sequencer(
             panes.pop(&*state);
         }
     }
+}
+
+fn dispatch_chopper(
+    action: &ChopperAction,
+    state: &mut AppState,
+    panes: &mut PaneManager,
+    audio_engine: &mut AudioEngine,
+) {
+    match action {
+        ChopperAction::LoadSample => {
+            if let Some(fb) = panes.get_pane_mut::<FileBrowserPane>("file_browser") {
+                fb.open_for(crate::ui::FileSelectAction::LoadChopperSample, None);
+            }
+            panes.push_to("file_browser", &*state);
+        }
+        ChopperAction::LoadSampleResult(path) => {
+            let path_str = path.to_string_lossy().to_string();
+            let name = path
+                .file_stem()
+                .map(|s| s.to_string_lossy().to_string())
+                .unwrap_or_default();
+
+            // Compute waveform peaks from WAV file
+            let (peaks, duration_secs) = compute_waveform_peaks(&path_str);
+
+            if let Some(seq) = state.instruments.selected_drum_sequencer_mut() {
+                let buffer_id = seq.next_buffer_id;
+                seq.next_buffer_id += 1;
+
+                if audio_engine.is_running() {
+                    let _ = audio_engine.load_sample(buffer_id, &path_str);
+                }
+
+                let initial_slice = Slice::full(0);
+                seq.chopper = Some(ChopperState {
+                    buffer_id: Some(buffer_id),
+                    path: Some(path_str),
+                    name,
+                    slices: vec![initial_slice],
+                    selected_slice: 0,
+                    next_slice_id: 1,
+                    waveform_peaks: peaks,
+                    duration_secs,
+                });
+            }
+
+            panes.pop(&*state);
+        }
+        ChopperAction::AddSlice(cursor_pos) => {
+            let cursor_pos = *cursor_pos;
+            if let Some(seq) = state.instruments.selected_drum_sequencer_mut() {
+                if let Some(chopper) = &mut seq.chopper {
+                    // Find which slice contains cursor_pos
+                    if let Some(idx) = chopper.slices.iter().position(|s| s.start <= cursor_pos && s.end > cursor_pos) {
+                        let old_end = chopper.slices[idx].end;
+                        chopper.slices[idx].end = cursor_pos;
+
+                        let new_id = chopper.next_slice_id;
+                        chopper.next_slice_id += 1;
+                        let new_slice = Slice::new(new_id, cursor_pos, old_end);
+                        chopper.slices.insert(idx + 1, new_slice);
+                        chopper.selected_slice = idx + 1;
+                    }
+                }
+            }
+        }
+        ChopperAction::RemoveSlice => {
+            if let Some(seq) = state.instruments.selected_drum_sequencer_mut() {
+                if let Some(chopper) = &mut seq.chopper {
+                    if chopper.slices.len() > 1 {
+                        let idx = chopper.selected_slice;
+                        let removed = chopper.slices.remove(idx);
+                        if idx > 0 {
+                            // Extend previous slice's end to cover gap
+                            chopper.slices[idx - 1].end = removed.end;
+                            chopper.selected_slice = idx - 1;
+                        } else if !chopper.slices.is_empty() {
+                            // Extend next slice's start to cover gap
+                            chopper.slices[0].start = removed.start;
+                            chopper.selected_slice = 0;
+                        }
+                    }
+                }
+            }
+        }
+        ChopperAction::AssignToPad(pad_idx) => {
+            if let Some(seq) = state.instruments.selected_drum_sequencer_mut() {
+                let assign_data = seq.chopper.as_ref().and_then(|c| {
+                    c.slices.get(c.selected_slice).map(|s| (c.buffer_id, s.start, s.end))
+                });
+                if let Some((buffer_id, start, end)) = assign_data {
+                    if let Some(pad) = seq.pads.get_mut(*pad_idx) {
+                        pad.buffer_id = buffer_id;
+                        pad.slice_start = start;
+                        pad.slice_end = end;
+                        // Copy name from chopper
+                        if let Some(chopper) = &seq.chopper {
+                            pad.name = format!("{} {}", chopper.name, chopper.selected_slice + 1);
+                            pad.path = chopper.path.clone();
+                        }
+                    }
+                }
+            }
+        }
+        ChopperAction::AutoSlice(n) => {
+            let n = *n;
+            if let Some(seq) = state.instruments.selected_drum_sequencer_mut() {
+                if let Some(chopper) = &mut seq.chopper {
+                    chopper.slices.clear();
+                    for i in 0..n {
+                        let start = i as f32 / n as f32;
+                        let end = (i + 1) as f32 / n as f32;
+                        let id = chopper.next_slice_id;
+                        chopper.next_slice_id += 1;
+                        chopper.slices.push(Slice::new(id, start, end));
+                    }
+                    chopper.selected_slice = 0;
+                }
+            }
+        }
+        ChopperAction::PreviewSlice => {
+            if let Some(instrument) = state.instruments.selected_instrument() {
+                if let Some(seq) = &instrument.drum_sequencer {
+                    if let Some(chopper) = &seq.chopper {
+                        if let Some(slice) = chopper.slices.get(chopper.selected_slice) {
+                            if let Some(buffer_id) = chopper.buffer_id {
+                                if audio_engine.is_running() {
+                                    let _ = audio_engine.play_drum_hit_to_instrument(
+                                        buffer_id, 0.8, instrument.id,
+                                        slice.start, slice.end,
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        ChopperAction::SelectSlice(delta) => {
+            if let Some(seq) = state.instruments.selected_drum_sequencer_mut() {
+                if let Some(chopper) = &mut seq.chopper {
+                    if !chopper.slices.is_empty() {
+                        let len = chopper.slices.len() as i8;
+                        let new_idx = (chopper.selected_slice as i8 + delta).rem_euclid(len) as usize;
+                        chopper.selected_slice = new_idx;
+                    }
+                }
+            }
+        }
+        ChopperAction::NudgeSliceStart(delta) => {
+            if let Some(seq) = state.instruments.selected_drum_sequencer_mut() {
+                if let Some(chopper) = &mut seq.chopper {
+                    if let Some(slice) = chopper.slices.get_mut(chopper.selected_slice) {
+                        slice.start = (slice.start + delta).clamp(0.0, slice.end - 0.001);
+                    }
+                }
+            }
+        }
+        ChopperAction::NudgeSliceEnd(delta) => {
+            if let Some(seq) = state.instruments.selected_drum_sequencer_mut() {
+                if let Some(chopper) = &mut seq.chopper {
+                    if let Some(slice) = chopper.slices.get_mut(chopper.selected_slice) {
+                        slice.end = (slice.end + delta).clamp(slice.start + 0.001, 1.0);
+                    }
+                }
+            }
+        }
+        ChopperAction::CommitAll => {
+            if let Some(seq) = state.instruments.selected_drum_sequencer_mut() {
+                if let Some(chopper) = &seq.chopper {
+                    let assignments: Vec<_> = chopper.slices.iter().enumerate()
+                        .take(crate::state::drum_sequencer::NUM_PADS)
+                        .map(|(i, s)| (i, chopper.buffer_id, s.start, s.end, chopper.name.clone(), chopper.path.clone()))
+                        .collect();
+                    for (i, buffer_id, start, end, name, path) in assignments {
+                        if let Some(pad) = seq.pads.get_mut(i) {
+                            pad.buffer_id = buffer_id;
+                            pad.slice_start = start;
+                            pad.slice_end = end;
+                            pad.name = format!("{} {}", name, i + 1);
+                            pad.path = path;
+                        }
+                    }
+                }
+            }
+            panes.pop(&*state);
+        }
+        ChopperAction::MoveCursor(_) => {
+            // Cursor tracked locally in pane
+        }
+    }
+}
+
+/// Compute waveform peaks from a WAV file for display
+fn compute_waveform_peaks(path: &str) -> (Vec<f32>, f32) {
+    let reader = match hound::WavReader::open(path) {
+        Ok(r) => r,
+        Err(_) => return (Vec::new(), 0.0),
+    };
+    let spec = reader.spec();
+    let num_channels = spec.channels as usize;
+    let sample_rate = spec.sample_rate;
+    let num_samples = reader.len() as usize;
+    let duration_secs = num_samples as f32 / (sample_rate as f32 * num_channels as f32);
+
+    let target_peaks = 512;
+    let samples_per_peak = (num_samples / target_peaks).max(1);
+
+    let mut peaks = Vec::with_capacity(target_peaks);
+    let samples: Vec<f32> = match spec.sample_format {
+        hound::SampleFormat::Int => {
+            let max_val = (1i64 << (spec.bits_per_sample - 1)) as f32;
+            reader.into_samples::<i32>()
+                .filter_map(|s| s.ok())
+                .map(|s| s as f32 / max_val)
+                .collect()
+        }
+        hound::SampleFormat::Float => {
+            reader.into_samples::<f32>()
+                .filter_map(|s| s.ok())
+                .collect()
+        }
+    };
+
+    for chunk in samples.chunks(samples_per_peak) {
+        let peak = chunk.iter().fold(0.0f32, |acc, &s| acc.max(s.abs()));
+        peaks.push(peak);
+    }
+
+    (peaks, duration_secs)
 }
 
 /// Get the config directory for custom synthdefs

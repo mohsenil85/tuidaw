@@ -2,7 +2,7 @@ use std::any::Any;
 
 use crate::state::drum_sequencer::NUM_PADS;
 use crate::state::AppState;
-use crate::ui::{Action, Color, Graphics, InputEvent, KeyCode, Keymap, Pane, Rect, SequencerAction, Style};
+use crate::ui::{Action, Color, Graphics, InputEvent, KeyCode, Keymap, NavAction, Pane, Rect, SequencerAction, Style};
 
 pub struct SequencerPane {
     keymap: Keymap,
@@ -26,7 +26,8 @@ impl SequencerPane {
                 .bind_key(KeyCode::Enter, "toggle", "Toggle step")
                 .bind(' ', "play_stop", "Play/stop")
                 .bind('s', "load_sample", "Load sample for pad")
-                .bind('c', "clear_pad", "Clear pad steps")
+                .bind('c', "chopper", "Sample chopper")
+                .bind('x', "clear_pad", "Clear pad steps")
                 .bind_ctrl('c', "clear_pattern", "Clear pattern")
                 .bind('[', "prev_pattern", "Previous pattern")
                 .bind(']', "next_pattern", "Next pattern")
@@ -121,6 +122,7 @@ impl Pane for SequencerPane {
             Some("load_sample") => {
                 Action::Sequencer(SequencerAction::LoadSample(self.cursor_pad))
             }
+            Some("chopper") => Action::Nav(NavAction::PushPane("sample_chopper")),
             Some("clear_pad") => Action::Sequencer(SequencerAction::ClearPad(self.cursor_pad)),
             Some("clear_pattern") => Action::Sequencer(SequencerAction::ClearPattern),
             Some("prev_pattern") => Action::Sequencer(SequencerAction::PrevPattern),
@@ -351,7 +353,7 @@ impl Pane for SequencerPane {
         g.put_str(
             cx,
             help_y,
-            "Enter:toggle  Space:play/stop  s:sample  c:clear  []:pattern  {:length  ?:help",
+            "Enter:toggle  Space:play/stop  s:sample  c:chopper  x:clear  []:pattern  {:length",
         );
     }
 

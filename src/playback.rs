@@ -148,6 +148,7 @@ pub fn tick_drum_sequencer(
                                 let amp = (step.velocity as f32 / 127.0) * pad.level;
                                 let _ = audio_engine.play_drum_hit_to_instrument(
                                     buffer_id, amp, instrument.id,
+                                    pad.slice_start, pad.slice_end,
                                 );
                             }
                         }

@@ -97,6 +97,23 @@ pub enum PianoRollAction {
     PlayStopRecord,
 }
 
+/// Sample chopper actions
+#[derive(Debug, Clone, PartialEq)]
+pub enum ChopperAction {
+    LoadSample,
+    LoadSampleResult(PathBuf),
+    AddSlice(f32),           // cursor_pos
+    RemoveSlice,
+    AssignToPad(usize),
+    AutoSlice(usize),
+    PreviewSlice,
+    SelectSlice(i8),         // +1/-1
+    NudgeSliceStart(f32),
+    NudgeSliceEnd(f32),
+    MoveCursor(i8),          // direction
+    CommitAll,               // assign all slices to pads and return
+}
+
 /// Audio server actions
 #[derive(Debug, Clone, PartialEq)]
 pub enum ServerAction {
@@ -130,6 +147,7 @@ pub enum Action {
     Server(ServerAction),
     Session(SessionAction),
     Sequencer(SequencerAction),
+    Chopper(ChopperAction),
 }
 
 /// Action to take when a file is selected in the file browser
@@ -137,6 +155,7 @@ pub enum Action {
 pub enum FileSelectAction {
     ImportCustomSynthDef,
     LoadDrumSample(usize), // pad index
+    LoadChopperSample,
 }
 
 /// Trait for UI panes (screens/views).
