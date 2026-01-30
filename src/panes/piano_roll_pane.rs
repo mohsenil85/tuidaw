@@ -176,7 +176,7 @@ impl PianoRollPane {
         g.set_style(Style::new().fg(Color::AUDIO_IN_COLOR));
         let track_label = if let Some(track) = piano_roll.track_at(self.current_track) {
             format!(
-                " Audio Input: strip-{} [{}/{}] ",
+                " Audio Input: instrument-{} [{}/{}] ",
                 track.module_id,
                 self.current_track + 1,
                 piano_roll.track_order.len(),
@@ -583,11 +583,11 @@ impl Pane for PianoRollPane {
     }
 
     fn render(&self, g: &mut dyn Graphics, state: &AppState) {
-        // Check if current track is an AudioIn strip
+        // Check if current track is an AudioIn instrument
         let piano_roll = &state.session.piano_roll;
-        let current_strip_id = piano_roll.track_at(self.current_track).map(|t| t.module_id);
-        let is_audio_in = current_strip_id
-            .and_then(|id| state.strip.strip(id))
+        let current_instrument_id = piano_roll.track_at(self.current_track).map(|t| t.module_id);
+        let is_audio_in = current_instrument_id
+            .and_then(|id| state.instruments.instrument(id))
             .map(|s| s.source.is_audio_input())
             .unwrap_or(false);
 

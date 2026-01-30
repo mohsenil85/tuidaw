@@ -20,9 +20,9 @@ impl HomePane {
     pub fn new() -> Self {
         let items = vec![
             MenuItem {
-                label: "Rack",
-                description: "Module rack - add and connect synthesizer modules",
-                pane_id: "rack",
+                label: "Instruments",
+                description: "Instrument list - add and edit synths",
+                pane_id: "instrument",
             },
             MenuItem {
                 label: "Mixer",

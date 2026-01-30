@@ -56,7 +56,7 @@ pub struct SessionState {
     pub snap: bool,
     pub time_signature: (u8, u8),
 
-    // Project state (hoisted from StripState)
+    // Project state (hoisted from InstrumentState)
     pub piano_roll: PianoRollState,
     pub automation: AutomationState,
     pub midi_recording: MidiRecordingState,

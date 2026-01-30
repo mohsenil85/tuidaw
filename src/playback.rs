@@ -12,7 +12,7 @@ pub fn tick_playback(
 ) {
     // Phase 1: advance playhead and collect note events
     let mut playback_data: Option<(
-        Vec<(u32, u8, u8, u32, u32)>, // note_ons: (strip_id, pitch, vel, duration, tick)
+        Vec<(u32, u8, u8, u32, u32)>, // note_ons: (instrument_id, pitch, vel, duration, tick)
         u32,                           // old_playhead
         u32,                           // new_playhead
         u32,                           // tick_delta
@@ -40,11 +40,11 @@ pub fn tick_playback(
                 let secs_per_tick = 60.0 / (pr.bpm as f64 * pr.ticks_per_beat as f64);
 
                 let mut note_ons: Vec<(u32, u8, u8, u32, u32)> = Vec::new();
-                for &strip_id in &pr.track_order {
-                    if let Some(track) = pr.tracks.get(&strip_id) {
+                for &instrument_id in &pr.track_order {
+                    if let Some(track) = pr.tracks.get(&instrument_id) {
                         for note in &track.notes {
                             if note.tick >= scan_start && note.tick < scan_end {
-                                note_ons.push((strip_id, note.pitch, note.velocity, note.duration, note.tick));
+                                note_ons.push((instrument_id, note.pitch, note.velocity, note.duration, note.tick));
                             }
                         }
                     }
@@ -59,7 +59,7 @@ pub fn tick_playback(
     if let Some((note_ons, old_playhead, new_playhead, tick_delta, secs_per_tick)) = playback_data {
         if audio_engine.is_running() {
             // Process note-ons
-            for &(strip_id, pitch, velocity, duration, note_tick) in &note_ons {
+            for &(instrument_id, pitch, velocity, duration, note_tick) in &note_ons {
                 let ticks_from_now = if note_tick >= old_playhead {
                     (note_tick - old_playhead) as f64
                 } else {
@@ -67,8 +67,8 @@ pub fn tick_playback(
                 };
                 let offset = ticks_from_now * secs_per_tick;
                 let vel_f = velocity as f32 / 127.0;
-                let _ = audio_engine.spawn_voice(strip_id, pitch, vel_f, offset, &state.instruments, &state.session);
-                active_notes.push((strip_id, pitch, duration));
+                let _ = audio_engine.spawn_voice(instrument_id, pitch, vel_f, offset, &state.instruments, &state.session);
+                active_notes.push((instrument_id, pitch, duration));
             }
 
             // Process automation
@@ -95,15 +95,15 @@ pub fn tick_playback(
         active_notes.retain(|n| n.2 > 0);
 
         if audio_engine.is_running() {
-            for (strip_id, pitch, remaining) in &note_offs {
+            for (instrument_id, pitch, remaining) in &note_offs {
                 let offset = *remaining as f64 * secs_per_tick;
-                let _ = audio_engine.release_voice(*strip_id, *pitch, offset, &state.instruments);
+                let _ = audio_engine.release_voice(*instrument_id, *pitch, offset, &state.instruments);
             }
         }
     }
 }
 
-/// Advance the drum sequencer for each drum machine strip and trigger pad hits.
+/// Advance the drum sequencer for each drum machine instrument and trigger pad hits.
 pub fn tick_drum_sequencer(
     state: &mut AppState,
     audio_engine: &mut AudioEngine,
@@ -111,8 +111,8 @@ pub fn tick_drum_sequencer(
 ) {
     let bpm = state.session.piano_roll.bpm;
 
-    for strip in &mut state.instruments.instruments {
-        let seq = match &mut strip.drum_sequencer {
+    for instrument in &mut state.instruments.instruments {
+        let seq = match &mut instrument.drum_sequencer {
             Some(s) => s,
             None => continue,
         };
@@ -130,7 +130,7 @@ pub fn tick_drum_sequencer(
             seq.step_accumulator -= 1.0;
             seq.current_step = (seq.current_step + 1) % pattern_length;
 
-            if audio_engine.is_running() && !strip.mute {
+            if audio_engine.is_running() && !instrument.mute {
                 let current_step = seq.current_step;
                 let current_pattern = seq.current_pattern;
                 let pattern = &seq.patterns[current_pattern];
@@ -144,7 +144,7 @@ pub fn tick_drum_sequencer(
                             if step.active {
                                 let amp = (step.velocity as f32 / 127.0) * pad.level;
                                 let _ = audio_engine.play_drum_hit_to_instrument(
-                                    buffer_id, amp, strip.id,
+                                    buffer_id, amp, instrument.id,
                                 );
                             }
                         }

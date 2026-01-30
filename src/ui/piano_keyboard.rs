@@ -7,7 +7,7 @@ pub enum PianoLayout {
 
 /// Shared piano keyboard state and key-to-pitch mapping.
 ///
-/// Used by StripPane, PianoRollPane, and StripEditPane.
+/// Used by InstrumentPane, PianoRollPane, and InstrumentEditPane.
 ///
 /// Available methods:
 /// - `activate()` / `deactivate()` / `is_active()` — toggle piano mode

@@ -144,7 +144,7 @@ impl Pane for SequencerPane {
                 let cx = rect.x + 2;
                 let cy = rect.y + rect.height / 2;
                 g.set_style(Style::new().fg(Color::DARK_GRAY));
-                g.put_str(cx + 10, cy, "No drum machine strip selected. Press 1 to add one.");
+                g.put_str(cx + 10, cy, "No drum machine instrument selected. Press 1 to add one.");
                 return;
             }
         };

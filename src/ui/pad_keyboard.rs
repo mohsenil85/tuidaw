@@ -1,4 +1,4 @@
-/// Pad keyboard for drum machine strips.
+/// Pad keyboard for drum machine instruments.
 /// Maps keyboard keys to 12 drum pads in a 4x3 grid layout:
 ///   R T Y U
 ///   F G H J

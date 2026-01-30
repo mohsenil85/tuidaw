@@ -1101,7 +1101,7 @@ fn insert_mod_source(
             env.attack as f64, env.decay as f64, env.sustain as f64, env.release as f64,
             None::<i32>, None::<String>
         ]),
-        ModSource::StripParam(sid, name) => stmt.execute(rusqlite::params![
+        ModSource::InstrumentParam(sid, name) => stmt.execute(rusqlite::params![
             instrument_id, target, "strip_param",
             None::<f64>, None::<f64>,
             None::<f64>, None::<f64>, None::<f64>, None::<f64>,
@@ -1163,7 +1163,7 @@ fn load_modulations(conn: &SqlConnection, instruments: &mut [Instrument]) -> Sql
                             release: env_r.unwrap_or(0.3) as f32,
                         })),
                         "strip_param" => {
-                            src_id.zip(src_name).map(|(id, name)| ModSource::StripParam(id, name))
+                            src_id.zip(src_name).map(|(id, name)| ModSource::InstrumentParam(id, name))
                         }
                         _ => None,
                     };

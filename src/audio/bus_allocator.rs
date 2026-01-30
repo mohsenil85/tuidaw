@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
-use crate::state::StripId;
+use crate::state::InstrumentId;
 
-type ModuleId = StripId;
+type ModuleId = InstrumentId;
 
 /// Manages audio and control bus allocation for module routing
 #[derive(Debug, Clone)]

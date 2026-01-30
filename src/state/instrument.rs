@@ -375,7 +375,7 @@ pub struct ModulatedParam {
 pub enum ModSource {
     Lfo(LfoConfig),
     Envelope(EnvConfig),
-    StripParam(InstrumentId, String),
+    InstrumentParam(InstrumentId, String),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -607,15 +607,15 @@ pub struct Instrument {
 impl Instrument {
     pub fn new(id: InstrumentId, source: OscType) -> Self {
         let sends = (1..=MAX_BUSES as u8).map(MixerSend::new).collect();
-        // Audio input and drum machine strips don't have piano roll tracks
+        // Audio input and drum machine instruments don't have piano roll tracks
         let has_track = !source.is_audio_input() && !source.is_drum_machine();
-        // Sampler strips get a sampler config
+        // Sampler instruments get a sampler config
         let sampler_config = if source.is_sampler() {
             Some(SamplerConfig::default())
         } else {
             None
         };
-        // Drum machine strips get a drum sequencer
+        // Drum machine instruments get a drum sequencer
         let drum_sequencer = if source.is_drum_machine() {
             Some(DrumSequencerState::new())
         } else {

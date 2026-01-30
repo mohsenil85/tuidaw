@@ -3,7 +3,7 @@ use std::any::Any;
 use crate::state::{AppState, MixerSelection, OutputTarget};
 use crate::ui::{Action, Color, Graphics, InputEvent, KeyCode, Keymap, MixerAction, Pane, Rect, Style};
 
-const STRIP_WIDTH: u16 = 8;
+const CHANNEL_WIDTH: u16 = 8;
 const METER_HEIGHT: u16 = 12;
 const NUM_VISIBLE_CHANNELS: usize = 8;
 const NUM_VISIBLE_BUSES: usize = 2;
@@ -210,9 +210,9 @@ impl MixerPane {
     fn render_mixer(&self, g: &mut dyn Graphics, state: &AppState) {
         let (width, height) = g.size();
 
-        let box_width = (NUM_VISIBLE_CHANNELS as u16 * STRIP_WIDTH) + 2 +
-                        (NUM_VISIBLE_BUSES as u16 * STRIP_WIDTH) + 2 +
-                        STRIP_WIDTH + 4;
+        let box_width = (NUM_VISIBLE_CHANNELS as u16 * CHANNEL_WIDTH) + 2 +
+                        (NUM_VISIBLE_BUSES as u16 * CHANNEL_WIDTH) + 2 +
+                        CHANNEL_WIDTH + 4;
         let box_height = METER_HEIGHT + 8;
         let rect = Rect::centered(width, height, box_width, box_height);
 
@@ -230,9 +230,9 @@ impl MixerPane {
         let output_y = indicator_y + 1;
 
         // Calculate scroll offsets
-        let strip_scroll = match state.session.mixer_selection {
-            MixerSelection::Strip(idx) => {
-                Self::calc_scroll_offset(idx, state.strip.strips.len(), NUM_VISIBLE_CHANNELS)
+        let instrument_scroll = match state.session.mixer_selection {
+            MixerSelection::Instrument(idx) => {
+                Self::calc_scroll_offset(idx, state.instruments.instruments.len(), NUM_VISIBLE_CHANNELS)
             }
             _ => 0,
         };
@@ -246,27 +246,27 @@ impl MixerPane {
 
         let mut x = base_x;
 
-        // Render strip channels (filled + empty slots)
+        // Render instrument channels (filled + empty slots)
         for i in 0..NUM_VISIBLE_CHANNELS {
-            let idx = strip_scroll + i;
-            if idx < state.strip.strips.len() {
-                let strip = &state.strip.strips[idx];
-                let is_selected = matches!(state.session.mixer_selection, MixerSelection::Strip(s) if s == idx);
+            let idx = instrument_scroll + i;
+            if idx < state.instruments.instruments.len() {
+                let instrument = &state.instruments.instruments[idx];
+                let is_selected = matches!(state.session.mixer_selection, MixerSelection::Instrument(s) if s == idx);
 
-                self.render_vertical_strip(
-                    g, x, &format!("S{}", strip.id), &strip.name,
-                    strip.level, strip.mute, strip.solo, Some(strip.output_target), is_selected,
+                self.render_vertical_channel(
+                    g, x, &format!("I{}", instrument.id), &instrument.name,
+                    instrument.level, instrument.mute, instrument.solo, Some(instrument.output_target), is_selected,
                     label_y, name_y, meter_top_y, db_y, indicator_y, output_y,
                 );
             } else {
                 // Empty unallocated channel slot
-                self.render_empty_strip(
-                    g, x, &format!("S{}", idx + 1),
+                self.render_empty_channel(
+                    g, x, &format!("I{}", idx + 1),
                     label_y, name_y, meter_top_y, db_y, indicator_y,
                 );
             }
 
-            x += STRIP_WIDTH;
+            x += CHANNEL_WIDTH;
         }
 
         // Separator before buses
@@ -285,13 +285,13 @@ impl MixerPane {
             let bus = &state.session.buses[bus_idx];
             let is_selected = matches!(state.session.mixer_selection, MixerSelection::Bus(id) if id == bus.id);
 
-            self.render_vertical_strip(
+            self.render_vertical_channel(
                 g, x, &format!("BUS{}", bus.id), &bus.name,
                 bus.level, bus.mute, bus.solo, None, is_selected,
                 label_y, name_y, meter_top_y, db_y, indicator_y, output_y,
             );
 
-            x += STRIP_WIDTH;
+            x += CHANNEL_WIDTH;
         }
 
         // Separator before master
@@ -303,7 +303,7 @@ impl MixerPane {
 
         // Master
         let is_master_selected = matches!(state.session.mixer_selection, MixerSelection::Master);
-        self.render_vertical_strip(
+        self.render_vertical_channel(
             g, x, "MASTER", "",
             state.session.master_level, state.session.master_mute, false, None, is_master_selected,
             label_y, name_y, meter_top_y, db_y, indicator_y, output_y,
@@ -312,9 +312,9 @@ impl MixerPane {
         // Send info line
         let send_y = output_y + 1;
         if let Some(bus_id) = self.send_target {
-            if let MixerSelection::Strip(idx) = state.session.mixer_selection {
-                if let Some(strip) = state.strip.strips.get(idx) {
-                    if let Some(send) = strip.sends.iter().find(|s| s.bus_id == bus_id) {
+            if let MixerSelection::Instrument(idx) = state.session.mixer_selection {
+                if let Some(instrument) = state.instruments.instruments.get(idx) {
+                    if let Some(send) = instrument.sends.iter().find(|s| s.bus_id == bus_id) {
                         let status = if send.enabled { "ON" } else { "OFF" };
                         let info = format!("Send\u{2192}B{}: {:.0}% [{}]", bus_id, send.level * 100.0, status);
                         g.set_style(Style::new().fg(Color::TEAL).bold());
@@ -335,7 +335,7 @@ impl MixerPane {
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn render_vertical_strip(
+    fn render_vertical_channel(
         &self,
         g: &mut dyn Graphics,
         x: u16,
@@ -353,7 +353,7 @@ impl MixerPane {
         indicator_y: u16,
         output_y: u16,
     ) {
-        let strip_w = (STRIP_WIDTH - 1) as usize;
+        let channel_w = (CHANNEL_WIDTH - 1) as usize;
 
         let label_style = if selected {
             Style::new().fg(Color::WHITE).bg(Color::SELECTION_BG).bold()
@@ -365,7 +365,7 @@ impl MixerPane {
             Style::new().fg(Color::CYAN)
         };
         g.set_style(label_style);
-        let label_str: String = label.chars().take(strip_w).collect();
+        let label_str: String = label.chars().take(channel_w).collect();
         g.put_str(x, label_y, &label_str);
 
         let text_style = if selected {
@@ -374,15 +374,15 @@ impl MixerPane {
             Style::new().fg(Color::DARK_GRAY)
         };
         g.set_style(text_style);
-        let name_display = if name.is_empty() && label.starts_with("S") {
+        let name_display = if name.is_empty() && label.starts_with("I") {
             "---"
         } else {
             name
         };
-        let name_str: String = name_display.chars().take(strip_w).collect();
+        let name_str: String = name_display.chars().take(channel_w).collect();
         g.put_str(x, name_y, &name_str);
 
-        let meter_x = x + (STRIP_WIDTH / 2).saturating_sub(1);
+        let meter_x = x + (CHANNEL_WIDTH / 2).saturating_sub(1);
         Self::render_vertical_meter(g, meter_x, meter_top_y, METER_HEIGHT, level);
 
         if selected {
@@ -422,7 +422,7 @@ impl MixerPane {
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn render_empty_strip(
+    fn render_empty_channel(
         &self,
         g: &mut dyn Graphics,
         x: u16,
@@ -433,14 +433,14 @@ impl MixerPane {
         db_y: u16,
         indicator_y: u16,
     ) {
-        let strip_w = (STRIP_WIDTH - 1) as usize;
+        let channel_w = (CHANNEL_WIDTH - 1) as usize;
 
         g.set_style(Style::new().fg(Color::DARK_GRAY));
-        let label_str: String = label.chars().take(strip_w).collect();
+        let label_str: String = label.chars().take(channel_w).collect();
         g.put_str(x, label_y, &label_str);
         g.put_str(x, name_y, "---");
 
-        let meter_x = x + (STRIP_WIDTH / 2).saturating_sub(1);
+        let meter_x = x + (CHANNEL_WIDTH / 2).saturating_sub(1);
         for row in 0..METER_HEIGHT {
             g.set_style(Style::new().fg(Color::DARK_GRAY));
             g.put_char(meter_x, meter_top_y + row, '\u{00b7}');

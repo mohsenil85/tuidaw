@@ -5,14 +5,14 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use rosc::{OscBundle, OscMessage, OscPacket, OscTime, OscType};
 
-/// Maximum number of waveform samples to keep per audio input strip
+/// Maximum number of waveform samples to keep per audio input instrument
 const WAVEFORM_BUFFER_SIZE: usize = 100;
 
 pub struct OscClient {
     socket: UdpSocket,
     server_addr: String,
     meter_data: Arc<Mutex<(f32, f32)>>,
-    /// Waveform data per audio input strip: strip_id -> ring buffer of peak values
+    /// Waveform data per audio input instrument: instrument_id -> ring buffer of peak values
     audio_in_waveforms: Arc<Mutex<HashMap<u32, VecDeque<f32>>>>,
     _recv_thread: Option<JoinHandle<()>>,
 }
@@ -39,8 +39,8 @@ fn handle_osc_packet(
                 }
             } else if msg.addr == "/audio_in_level" && msg.args.len() >= 4 {
                 // SendPeakRMS format: /audio_in_level nodeID replyID peakL rmsL peakR rmsR
-                // args[0] = nodeID, args[1] = replyID (our strip_id), args[2] = peakL
-                let strip_id = match msg.args.get(1) {
+                // args[0] = nodeID, args[1] = replyID (our instrument_id), args[2] = peakL
+                let instrument_id = match msg.args.get(1) {
                     Some(OscType::Int(v)) => *v as u32,
                     Some(OscType::Float(v)) => *v as u32,
                     _ => return,
@@ -50,7 +50,7 @@ fn handle_osc_packet(
                     _ => 0.0,
                 };
                 if let Ok(mut waveforms) = waveform_ref.lock() {
-                    let buffer = waveforms.entry(strip_id).or_insert_with(VecDeque::new);
+                    let buffer = waveforms.entry(instrument_id).or_insert_with(VecDeque::new);
                     buffer.push_back(peak);
                     while buffer.len() > WAVEFORM_BUFFER_SIZE {
                         buffer.pop_front();
@@ -107,11 +107,11 @@ impl OscClient {
         self.meter_data.lock().map(|d| *d).unwrap_or((0.0, 0.0))
     }
 
-    /// Get waveform data for an audio input strip (returns a copy of the buffer)
-    pub fn audio_in_waveform(&self, strip_id: u32) -> Vec<f32> {
+    /// Get waveform data for an audio input instrument (returns a copy of the buffer)
+    pub fn audio_in_waveform(&self, instrument_id: u32) -> Vec<f32> {
         self.audio_in_waveforms
             .lock()
-            .map(|w| w.get(&strip_id).map(|d| d.iter().copied().collect()).unwrap_or_default())
+            .map(|w| w.get(&instrument_id).map(|d| d.iter().copied().collect()).unwrap_or_default())
             .unwrap_or_default()
     }
 

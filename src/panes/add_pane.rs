@@ -1,9 +1,9 @@
 use std::any::Any;
 
 use crate::state::{AppState, CustomSynthDefRegistry, OscType};
-use crate::ui::{Action, Color, FileSelectAction, Graphics, InputEvent, KeyCode, Keymap, NavAction, Pane, Rect, SessionAction, StripAction, Style};
+use crate::ui::{Action, Color, FileSelectAction, Graphics, InputEvent, InstrumentAction, KeyCode, Keymap, NavAction, Pane, Rect, SessionAction, Style};
 
-/// Options available in the Add Strip menu
+/// Options available in the Add Instrument menu
 #[derive(Debug, Clone)]
 pub enum AddOption {
     OscType(OscType),
@@ -22,7 +22,7 @@ impl AddPane {
     pub fn new() -> Self {
         Self {
             keymap: Keymap::new()
-                .bind_key(KeyCode::Enter, "confirm", "Add selected strip")
+                .bind_key(KeyCode::Enter, "confirm", "Add selected instrument")
                 .bind_key(KeyCode::Escape, "cancel", "Cancel and return")
                 .bind_key(KeyCode::Down, "next", "Next")
                 .bind('j', "next", "Next")
@@ -123,7 +123,7 @@ impl AddPane {
         let rect = Rect::centered(width, height, box_width, box_height);
 
         g.set_style(Style::new().fg(Color::LIME));
-        g.draw_box(rect, Some(" Add Strip "));
+        g.draw_box(rect, Some(" Add Instrument "));
 
         let content_x = rect.x + 2;
         let content_y = rect.y + 2;
@@ -248,7 +248,7 @@ impl Pane for AddPane {
             Some("confirm") => {
                 if let Some(option) = self.cached_options.get(self.selected) {
                     match option {
-                        AddOption::OscType(osc) => Action::Strip(StripAction::Add(*osc)),
+                        AddOption::OscType(osc) => Action::Instrument(InstrumentAction::Add(*osc)),
                         AddOption::ImportCustom => {
                             Action::Session(SessionAction::OpenFileBrowser(FileSelectAction::ImportCustomSynthDef))
                         }
@@ -258,7 +258,7 @@ impl Pane for AddPane {
                     Action::None
                 }
             }
-            Some("cancel") => Action::Nav(NavAction::SwitchPane("strip")),
+            Some("cancel") => Action::Nav(NavAction::SwitchPane("instrument")),
             Some("next") => {
                 self.select_next();
                 Action::None

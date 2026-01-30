@@ -83,29 +83,29 @@ fn dispatch_instrument(
                     dummy
                 });
             if let Some(edited) = edits {
-                if let Some(strip) = state.instruments.instrument_mut(id) {
-                    strip.source = edited.source;
-                    strip.source_params = edited.source_params;
-                    strip.filter = edited.filter;
-                    strip.effects = edited.effects;
-                    strip.amp_envelope = edited.amp_envelope;
-                    strip.polyphonic = edited.polyphonic;
+                if let Some(instrument) = state.instruments.instrument_mut(id) {
+                    instrument.source = edited.source;
+                    instrument.source_params = edited.source_params;
+                    instrument.filter = edited.filter;
+                    instrument.effects = edited.effects;
+                    instrument.amp_envelope = edited.amp_envelope;
+                    instrument.polyphonic = edited.polyphonic;
 
                     // Handle track toggle
-                    if edited.has_track != strip.has_track {
-                        strip.has_track = edited.has_track;
+                    if edited.has_track != instrument.has_track {
+                        instrument.has_track = edited.has_track;
                     }
                 }
                 // Sync piano roll tracks
-                let strips: Vec<(u32, bool)> = state.instruments.instruments.iter()
+                let instruments: Vec<(u32, bool)> = state.instruments.instruments.iter()
                     .map(|s| (s.id, s.has_track))
                     .collect();
                 let pr = &mut state.session.piano_roll;
-                for (sid, has_track) in strips {
-                    if has_track && !pr.tracks.contains_key(&sid) {
-                        pr.add_track(sid);
-                    } else if !has_track && pr.tracks.contains_key(&sid) {
-                        pr.remove_track(sid);
+                for (instrument_id, has_track) in instruments {
+                    if has_track && !pr.tracks.contains_key(&instrument_id) {
+                        pr.add_track(instrument_id);
+                    } else if !has_track && pr.tracks.contains_key(&instrument_id) {
+                        pr.remove_track(instrument_id);
                     }
                 }
             }
@@ -114,30 +114,30 @@ fn dispatch_instrument(
             }
             // Don't switch pane - stay in edit
         }
-        InstrumentAction::SetParam(strip_id, ref param, value) => {
+        InstrumentAction::SetParam(instrument_id, ref param, value) => {
             // Update state
-            if let Some(strip) = state.instruments.instrument_mut(*strip_id) {
-                if let Some(p) = strip.source_params.iter_mut().find(|p| p.name == *param) {
+            if let Some(instrument) = state.instruments.instrument_mut(*instrument_id) {
+                if let Some(p) = instrument.source_params.iter_mut().find(|p| p.name == *param) {
                     p.value = crate::state::ParamValue::Float(*value);
                 }
             }
             // Update audio engine in real-time
             if audio_engine.is_running() {
-                let _ = audio_engine.set_source_param(*strip_id, param, *value);
+                let _ = audio_engine.set_source_param(*instrument_id, param, *value);
             }
         }
         InstrumentAction::PlayNote(pitch, velocity) => {
             let pitch = *pitch;
             let velocity = *velocity;
-            // Get the selected strip's id
-            let strip_info: Option<u32> = state.instruments.selected_instrument().map(|s| s.id);
+            // Get the selected instrument's id
+            let instrument_info: Option<u32> = state.instruments.selected_instrument().map(|s| s.id);
 
-            if let Some(strip_id) = strip_info {
+            if let Some(instrument_id) = instrument_info {
                 if audio_engine.is_running() {
                     let vel_f = velocity as f32 / 127.0;
-                    let _ = audio_engine.spawn_voice(strip_id, pitch, vel_f, 0.0, &state.instruments, &state.session);
+                    let _ = audio_engine.spawn_voice(instrument_id, pitch, vel_f, 0.0, &state.instruments, &state.session);
                     let duration_ticks = 240;
-                    active_notes.push((strip_id, pitch, duration_ticks));
+                    active_notes.push((instrument_id, pitch, duration_ticks));
                 }
             }
         }
@@ -158,14 +158,14 @@ fn dispatch_instrument(
             }
         }
         InstrumentAction::PlayDrumPad(pad_idx) => {
-            if let Some(strip) = state.instruments.selected_instrument() {
-                if let Some(seq) = &strip.drum_sequencer {
+            if let Some(instrument) = state.instruments.selected_instrument() {
+                if let Some(seq) = &instrument.drum_sequencer {
                     if let Some(pad) = seq.pads.get(*pad_idx) {
-                        if let (Some(buffer_id), strip_id) = (pad.buffer_id, strip.id) {
+                        if let (Some(buffer_id), instrument_id) = (pad.buffer_id, instrument.id) {
                             let amp = pad.level;
                             if audio_engine.is_running() {
                                 let _ = audio_engine.play_drum_hit_to_instrument(
-                                    buffer_id, amp, strip_id,
+                                    buffer_id, amp, instrument_id,
                                 );
                             }
                         }
@@ -199,8 +199,8 @@ fn dispatch_mixer(
             let mut bus_update: Option<(u8, f32, bool, f32)> = None;
             match state.session.mixer_selection {
                 MixerSelection::Instrument(idx) => {
-                    if let Some(strip) = state.instruments.instruments.get_mut(idx) {
-                        strip.level = (strip.level + delta).clamp(0.0, 1.0);
+                    if let Some(instrument) = state.instruments.instruments.get_mut(idx) {
+                        instrument.level = (instrument.level + delta).clamp(0.0, 1.0);
                     }
                 }
                 MixerSelection::Bus(id) => {
@@ -227,8 +227,8 @@ fn dispatch_mixer(
             let mut bus_update: Option<(u8, f32, bool, f32)> = None;
             match state.session.mixer_selection {
                 MixerSelection::Instrument(idx) => {
-                    if let Some(strip) = state.instruments.instruments.get_mut(idx) {
-                        strip.mute = !strip.mute;
+                    if let Some(instrument) = state.instruments.instruments.get_mut(idx) {
+                        instrument.mute = !instrument.mute;
                     }
                 }
                 MixerSelection::Bus(id) => {
@@ -255,8 +255,8 @@ fn dispatch_mixer(
             let mut bus_updates: Vec<(u8, f32, bool, f32)> = Vec::new();
             match state.session.mixer_selection {
                 MixerSelection::Instrument(idx) => {
-                    if let Some(strip) = state.instruments.instruments.get_mut(idx) {
-                        strip.solo = !strip.solo;
+                    if let Some(instrument) = state.instruments.instruments.get_mut(idx) {
+                        instrument.solo = !instrument.solo;
                     }
                 }
                 MixerSelection::Bus(id) => {
@@ -290,8 +290,8 @@ fn dispatch_mixer(
             let bus_id = *bus_id;
             let delta = *delta;
             if let MixerSelection::Instrument(idx) = state.session.mixer_selection {
-                if let Some(strip) = state.instruments.instruments.get_mut(idx) {
-                    if let Some(send) = strip.sends.iter_mut().find(|s| s.bus_id == bus_id) {
+                if let Some(instrument) = state.instruments.instruments.get_mut(idx) {
+                    if let Some(send) = instrument.sends.iter_mut().find(|s| s.bus_id == bus_id) {
                         send.level = (send.level + delta).clamp(0.0, 1.0);
                     }
                 }
@@ -300,8 +300,8 @@ fn dispatch_mixer(
         MixerAction::ToggleSend(bus_id) => {
             let bus_id = *bus_id;
             if let MixerSelection::Instrument(idx) = state.session.mixer_selection {
-                if let Some(strip) = state.instruments.instruments.get_mut(idx) {
-                    if let Some(send) = strip.sends.iter_mut().find(|s| s.bus_id == bus_id) {
+                if let Some(instrument) = state.instruments.instruments.get_mut(idx) {
+                    if let Some(send) = instrument.sends.iter_mut().find(|s| s.bus_id == bus_id) {
                         send.enabled = !send.enabled;
                         if send.enabled && send.level <= 0.0 {
                             send.level = 0.5;
@@ -434,8 +434,8 @@ fn dispatch_piano_roll(
         PianoRollAction::PlayNote(pitch, velocity) => {
             let pitch = *pitch;
             let velocity = *velocity;
-            // Get the current track's strip_id
-            let track_strip_id: Option<u32> = {
+            // Get the current track's instrument_id
+            let track_instrument_id: Option<u32> = {
                 let track_idx = panes
                     .get_pane_mut::<PianoRollPane>("piano_roll")
                     .map(|pr| pr.current_track());
@@ -446,12 +446,12 @@ fn dispatch_piano_roll(
                 }
             };
 
-            if let Some(strip_id) = track_strip_id {
+            if let Some(instrument_id) = track_instrument_id {
                 if audio_engine.is_running() {
                     let vel_f = velocity as f32 / 127.0;
-                    let _ = audio_engine.spawn_voice(strip_id, pitch, vel_f, 0.0, &state.instruments, &state.session);
+                    let _ = audio_engine.spawn_voice(instrument_id, pitch, vel_f, 0.0, &state.instruments, &state.session);
                     let duration_ticks = 240; // Half beat for staccato feel
-                    active_notes.push((strip_id, pitch, duration_ticks));
+                    active_notes.push((instrument_id, pitch, duration_ticks));
                 }
 
                 // Record note if recording
@@ -498,9 +498,9 @@ fn dispatch_server(
                             Ok(())
                         };
 
-                        // Load drum sequencer samples for all drum machine strips
-                        for strip in &state.instruments.instruments {
-                            if let Some(seq) = &strip.drum_sequencer {
+                        // Load drum sequencer samples for all drum machine instruments
+                        for instrument in &state.instruments.instruments {
+                            if let Some(seq) = &instrument.drum_sequencer {
                                 for pad in &seq.pads {
                                     if let Some(buffer_id) = pad.buffer_id {
                                         if let Some(ref path) = pad.path {
@@ -631,9 +631,9 @@ fn dispatch_session(
             let path = default_rack_path();
             if path.exists() {
                 match crate::state::persistence::load_project(&path) {
-                    Ok((loaded_session, loaded_strip)) => {
+                    Ok((loaded_session, loaded_instruments)) => {
                         state.session = loaded_session;
-                        state.instruments = loaded_strip;
+                        state.instruments = loaded_instruments;
                         let name = path.file_stem()
                             .and_then(|s| s.to_str())
                             .unwrap_or("default")

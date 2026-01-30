@@ -74,9 +74,9 @@ pub struct PitchBendConfig {
 }
 
 impl PitchBendConfig {
-    pub fn new_for_sampler(strip_id: InstrumentId) -> Self {
+    pub fn new_for_sampler(instrument_id: InstrumentId) -> Self {
         Self {
-            target: AutomationTarget::SamplerRate(strip_id),
+            target: AutomationTarget::SamplerRate(instrument_id),
             center_value: 1.0, // Normal playback speed
             range: 1.0,        // -0.0 (stopped/reverse) to 2.0 (double speed)
             sensitivity: 1.0,
@@ -97,10 +97,10 @@ pub struct MidiRecordingState {
     pub record_mode: RecordMode,
     /// CC to automation mappings
     pub cc_mappings: Vec<MidiCcMapping>,
-    /// Pitch bend configurations per strip
+    /// Pitch bend configurations per instrument
     pub pitch_bend_configs: Vec<PitchBendConfig>,
-    /// Currently selected strip for live MIDI input
-    pub live_input_strip: Option<InstrumentId>,
+    /// Currently selected instrument for live MIDI input
+    pub live_input_instrument: Option<InstrumentId>,
     /// Whether to pass-through MIDI notes to audio engine
     pub note_passthrough: bool,
     /// MIDI channel filter (None = all channels)
@@ -113,7 +113,7 @@ impl MidiRecordingState {
             record_mode: RecordMode::Off,
             cc_mappings: Vec::new(),
             pitch_bend_configs: Vec::new(),
-            live_input_strip: None,
+            live_input_instrument: None,
             note_passthrough: true,
             channel_filter: None,
         }
@@ -143,17 +143,17 @@ impl MidiRecordingState {
         })
     }
 
-    /// Add pitch bend config for a strip
+    /// Add pitch bend config for an instrument
     pub fn add_pitch_bend_config(&mut self, config: PitchBendConfig) {
-        // Remove existing config for same target strip
-        let strip_id = config.target.instrument_id();
-        self.pitch_bend_configs.retain(|c| c.target.instrument_id() != strip_id);
+        // Remove existing config for same target instrument
+        let instrument_id = config.target.instrument_id();
+        self.pitch_bend_configs.retain(|c| c.target.instrument_id() != instrument_id);
         self.pitch_bend_configs.push(config);
     }
 
-    /// Find pitch bend config for a strip
-    pub fn find_pitch_bend_config(&self, strip_id: InstrumentId) -> Option<&PitchBendConfig> {
-        self.pitch_bend_configs.iter().find(|c| c.target.instrument_id() == strip_id)
+    /// Find pitch bend config for an instrument
+    pub fn find_pitch_bend_config(&self, instrument_id: InstrumentId) -> Option<&PitchBendConfig> {
+        self.pitch_bend_configs.iter().find(|c| c.target.instrument_id() == instrument_id)
     }
 
     /// Arm for recording
@@ -183,9 +183,9 @@ impl MidiRecordingState {
         self.record_mode == RecordMode::Armed
     }
 
-    /// Set the strip for live MIDI input
-    pub fn set_live_input_strip(&mut self, strip_id: Option<InstrumentId>) {
-        self.live_input_strip = strip_id;
+    /// Set the instrument for live MIDI input
+    pub fn set_live_input_instrument(&mut self, instrument_id: Option<InstrumentId>) {
+        self.live_input_instrument = instrument_id;
     }
 
     /// Check if a MIDI channel should be processed

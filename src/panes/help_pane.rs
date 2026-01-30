@@ -28,7 +28,7 @@ impl HelpPane {
                 .bind_key(KeyCode::Home, "top", "Go to top")
                 .bind_key(KeyCode::End, "bottom", "Go to bottom"),
             display_keymap: Vec::new(),
-            return_to: "rack",
+            return_to: "instrument",
             title: String::new(),
             scroll: 0,
         }

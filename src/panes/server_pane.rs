@@ -115,7 +115,7 @@ impl Pane for ServerPane {
         g.put_str(x, help_y, "s: start server  k: kill server");
         g.put_str(x, help_y + 1, "c: connect       d: disconnect");
         g.put_str(x, help_y + 2, "b: build synths  l: load synths");
-        g.put_str(x, help_y + 3, "F1: help  F2: rack  F5: mixer");
+        g.put_str(x, help_y + 3, "F1: help  F2: instruments  F5: mixer");
     }
 
     fn keymap(&self) -> &Keymap {

@@ -75,7 +75,7 @@ impl Slice {
     }
 }
 
-/// Sampler configuration for a strip
+/// Sampler configuration for an instrument
 #[derive(Debug, Clone)]
 pub struct SamplerConfig {
     pub buffer_id: Option<BufferId>,

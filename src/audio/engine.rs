@@ -341,8 +341,8 @@ impl AudioEngine {
         et.synth_def_name()
     }
 
-    /// Rebuild all routing based on strip state.
-    /// Per strip, create a deterministic synth chain:
+    /// Rebuild all routing based on instrument state.
+    /// Per instrument, create a deterministic synth chain:
     /// 1. Source synth (osc)
     /// 2. Optional filter synth
     /// 3. Effect synths in order
@@ -377,31 +377,31 @@ impl AudioEngine {
         self.bus_audio_buses.clear();
         self.bus_allocator.reset();
 
-        // For each strip, create a linear chain of synths
-        // We don't create static source synths for polyphonic strips (voices are spawned dynamically)
+        // For each instrument, create a linear chain of synths
+        // We don't create static source synths for polyphonic instruments (voices are spawned dynamically)
         // But we still need the output synth for summing voice output
 
-        for strip in &state.instruments {
+        for instrument in &state.instruments {
             let mut source_node: Option<i32> = None;
             let mut lfo_node: Option<i32> = None;
             let mut filter_node: Option<i32> = None;
             let mut effect_nodes: Vec<i32> = Vec::new();
 
             // Allocate the audio bus that voices/source write to
-            let source_out_bus = self.bus_allocator.get_or_alloc_audio_bus(strip.id, "source_out");
+            let source_out_bus = self.bus_allocator.get_or_alloc_audio_bus(instrument.id, "source_out");
             let mut current_bus = source_out_bus;
 
-            // For AudioIn strips, create a persistent audio input synth
-            if strip.source.is_audio_input() {
+            // For AudioIn instruments, create a persistent audio input synth
+            if instrument.source.is_audio_input() {
                 let node_id = self.next_node_id;
                 self.next_node_id += 1;
 
                 let mut params: Vec<(String, f32)> = vec![
                     ("out".to_string(), source_out_bus as f32),
-                    ("strip_id".to_string(), strip.id as f32),
+                    ("strip_id".to_string(), instrument.id as f32),
                 ];
                 // Add source params (gain, channel, test_tone, test_freq)
-                for p in &strip.source_params {
+                for p in &instrument.source_params {
                     let val = match &p.value {
                         crate::state::param::ParamValue::Float(v) => *v,
                         crate::state::param::ParamValue::Int(v) => *v as f32,
@@ -420,19 +420,19 @@ impl AudioEngine {
 
                 source_node = Some(node_id);
             }
-            // For oscillator strips, voices are spawned dynamically via spawn_voice()
+            // For oscillator instruments, voices are spawned dynamically via spawn_voice()
 
             // LFO (if enabled)
-            let lfo_control_bus: Option<i32> = if strip.lfo.enabled {
+            let lfo_control_bus: Option<i32> = if instrument.lfo.enabled {
                 let lfo_node_id = self.next_node_id;
                 self.next_node_id += 1;
-                let lfo_out_bus = self.bus_allocator.get_or_alloc_control_bus(strip.id, "lfo_out");
+                let lfo_out_bus = self.bus_allocator.get_or_alloc_control_bus(instrument.id, "lfo_out");
 
                 let params = vec![
                     ("out".to_string(), lfo_out_bus as f32),
-                    ("rate".to_string(), strip.lfo.rate),
-                    ("depth".to_string(), strip.lfo.depth),
-                    ("shape".to_string(), strip.lfo.shape.index() as f32),
+                    ("rate".to_string(), instrument.lfo.rate),
+                    ("depth".to_string(), instrument.lfo.depth),
+                    ("shape".to_string(), instrument.lfo.shape.index() as f32),
                 ];
 
                 let client = self.client.as_ref().ok_or("Not connected")?;
@@ -450,13 +450,13 @@ impl AudioEngine {
             };
 
             // Filter (if present)
-            if let Some(ref filter) = strip.filter {
+            if let Some(ref filter) = instrument.filter {
                 let node_id = self.next_node_id;
                 self.next_node_id += 1;
-                let filter_out_bus = self.bus_allocator.get_or_alloc_audio_bus(strip.id, "filter_out");
+                let filter_out_bus = self.bus_allocator.get_or_alloc_audio_bus(instrument.id, "filter_out");
 
                 // Determine if LFO should modulate the filter cutoff
-                let cutoff_mod_bus = if strip.lfo.enabled && strip.lfo.target == crate::state::LfoTarget::FilterCutoff {
+                let cutoff_mod_bus = if instrument.lfo.enabled && instrument.lfo.target == crate::state::LfoTarget::FilterCutoff {
                     lfo_control_bus.map(|b| b as f32).unwrap_or(-1.0)
                 } else {
                     -1.0 // No modulation
@@ -483,14 +483,14 @@ impl AudioEngine {
             }
 
             // Effects
-            for (i, effect) in strip.effects.iter().enumerate() {
+            for (i, effect) in instrument.effects.iter().enumerate() {
                 if !effect.enabled {
                     continue;
                 }
                 let node_id = self.next_node_id;
                 self.next_node_id += 1;
                 let effect_out_bus = self.bus_allocator.get_or_alloc_audio_bus(
-                    strip.id,
+                    instrument.id,
                     &format!("fx_{}_out", i),
                 );
 
@@ -525,12 +525,12 @@ impl AudioEngine {
                 let node_id = self.next_node_id;
                 self.next_node_id += 1;
                 let any_solo = state.any_instrument_solo();
-                let mute = if any_solo { !strip.solo } else { strip.mute || session.master_mute };
+                let mute = if any_solo { !instrument.solo } else { instrument.mute || session.master_mute };
                 let params = vec![
                     ("in".to_string(), current_bus as f32),
-                    ("level".to_string(), strip.level * session.master_level),
+                    ("level".to_string(), instrument.level * session.master_level),
                     ("mute".to_string(), if mute { 1.0 } else { 0.0 }),
-                    ("pan".to_string(), strip.pan),
+                    ("pan".to_string(), instrument.pan),
                 ];
 
                 let client = self.client.as_ref().ok_or("Not connected")?;
@@ -544,7 +544,7 @@ impl AudioEngine {
                 output_node_id = node_id;
             }
 
-            self.node_map.insert(strip.id, InstrumentNodes {
+            self.node_map.insert(instrument.id, InstrumentNodes {
                 source: source_node,
                 lfo: lfo_node,
                 filter: filter_node,
@@ -567,11 +567,11 @@ impl AudioEngine {
         }
 
         // Create send synths
-        for (instrument_idx, strip) in state.instruments.iter().enumerate() {
-            // Get the strip's source_out bus (where voices sum into)
-            let strip_audio_bus = self.bus_allocator.get_audio_bus(strip.id, "source_out").unwrap_or(16);
+        for (instrument_idx, instrument) in state.instruments.iter().enumerate() {
+            // Get the instrument's source_out bus (where voices sum into)
+            let instrument_audio_bus = self.bus_allocator.get_audio_bus(instrument.id, "source_out").unwrap_or(16);
 
-            for send in &strip.sends {
+            for send in &instrument.sends {
                 if !send.enabled || send.level <= 0.0 {
                     continue;
                 }
@@ -579,7 +579,7 @@ impl AudioEngine {
                     let node_id = self.next_node_id;
                     self.next_node_id += 1;
                     let params = vec![
-                        ("in".to_string(), strip_audio_bus as f32),
+                        ("in".to_string(), instrument_audio_bus as f32),
                         ("out".to_string(), bus_audio as f32),
                         ("level".to_string(), send.level),
                     ];
@@ -632,39 +632,39 @@ impl AudioEngine {
         Ok(())
     }
 
-    /// Update all strip output mixer params (level, mute, pan) in real-time without rebuilding the graph
+    /// Update all instrument output mixer params (level, mute, pan) in real-time without rebuilding the graph
     pub fn update_all_instrument_mixer_params(&self, state: &InstrumentState, session: &SessionState) -> Result<(), String> {
         if !self.is_running { return Ok(()); }
         let client = self.client.as_ref().ok_or("Not connected")?;
         let any_solo = state.any_instrument_solo();
-        for strip in &state.instruments {
-            if let Some(nodes) = self.node_map.get(&strip.id) {
-                let mute = strip.mute || session.master_mute || (any_solo && !strip.solo);
-                client.set_param(nodes.output, "level", strip.level * session.master_level)
+        for instrument in &state.instruments {
+            if let Some(nodes) = self.node_map.get(&instrument.id) {
+                let mute = instrument.mute || session.master_mute || (any_solo && !instrument.solo);
+                client.set_param(nodes.output, "level", instrument.level * session.master_level)
                     .map_err(|e| e.to_string())?;
                 client.set_param(nodes.output, "mute", if mute { 1.0 } else { 0.0 })
                     .map_err(|e| e.to_string())?;
-                client.set_param(nodes.output, "pan", strip.pan)
+                client.set_param(nodes.output, "pan", instrument.pan)
                     .map_err(|e| e.to_string())?;
             }
         }
         Ok(())
     }
 
-    /// Set a source parameter on a strip in real-time.
+    /// Set a source parameter on an instrument in real-time.
     /// Updates the persistent source node (AudioIn) and all active voice source nodes.
     pub fn set_source_param(&self, instrument_id: InstrumentId, param: &str, value: f32) -> Result<(), String> {
         if !self.is_running { return Ok(()); }
         let client = self.client.as_ref().ok_or("Not connected")?;
 
-        // Set on persistent source node (AudioIn strips)
+        // Set on persistent source node (AudioIn instruments)
         if let Some(nodes) = self.node_map.get(&instrument_id) {
             if let Some(source_node) = nodes.source {
                 let _ = client.set_param(source_node, param, value);
             }
         }
 
-        // Set on all active voice source nodes (oscillator/sampler strips)
+        // Set on all active voice source nodes (oscillator/sampler instruments)
         for voice in &self.voice_chains {
             if voice.instrument_id == instrument_id {
                 let _ = client.set_param(voice.source_node, param, value);
@@ -674,7 +674,7 @@ impl AudioEngine {
         Ok(())
     }
 
-    /// Spawn a voice for a strip
+    /// Spawn a voice for an instrument
     pub fn spawn_voice(
         &mut self,
         instrument_id: InstrumentId,
@@ -684,16 +684,16 @@ impl AudioEngine {
         state: &InstrumentState,
         session: &SessionState,
     ) -> Result<(), String> {
-        let strip = state.instrument(instrument_id)
-            .ok_or_else(|| format!("No strip with id {}", instrument_id))?;
+        let instrument = state.instrument(instrument_id)
+            .ok_or_else(|| format!("No instrument with id {}", instrument_id))?;
 
-        // AudioIn strips don't use voice spawning - they have a persistent synth
-        if strip.source.is_audio_input() {
+        // AudioIn instruments don't use voice spawning - they have a persistent synth
+        if instrument.source.is_audio_input() {
             return Ok(());
         }
 
-        // Sampler strips need special handling
-        if strip.source.is_sampler() {
+        // Sampler instruments need special handling
+        if instrument.source.is_sampler() {
             return self.spawn_sampler_voice(instrument_id, pitch, velocity, offset_secs, state);
         }
 
@@ -776,13 +776,13 @@ impl AudioEngine {
         self.next_node_id += 1;
         {
             let mut args: Vec<rosc::OscType> = vec![
-                rosc::OscType::String(Self::osc_synth_def(strip.source, &session.custom_synthdefs)),
+                rosc::OscType::String(Self::osc_synth_def(instrument.source, &session.custom_synthdefs)),
                 rosc::OscType::Int(osc_node_id),
                 rosc::OscType::Int(1),
                 rosc::OscType::Int(group_id),
             ];
             // Source params
-            for p in &strip.source_params {
+            for p in &instrument.source_params {
                 let val = match &p.value {
                     ParamValue::Float(v) => *v,
                     ParamValue::Int(v) => *v as f32,
@@ -798,13 +798,13 @@ impl AudioEngine {
             args.push(rosc::OscType::Float(voice_gate_bus as f32));
             // Amp envelope (ADSR)
             args.push(rosc::OscType::String("attack".to_string()));
-            args.push(rosc::OscType::Float(strip.amp_envelope.attack));
+            args.push(rosc::OscType::Float(instrument.amp_envelope.attack));
             args.push(rosc::OscType::String("decay".to_string()));
-            args.push(rosc::OscType::Float(strip.amp_envelope.decay));
+            args.push(rosc::OscType::Float(instrument.amp_envelope.decay));
             args.push(rosc::OscType::String("sustain".to_string()));
-            args.push(rosc::OscType::Float(strip.amp_envelope.sustain));
+            args.push(rosc::OscType::Float(instrument.amp_envelope.sustain));
             args.push(rosc::OscType::String("release".to_string()));
-            args.push(rosc::OscType::Float(strip.amp_envelope.release));
+            args.push(rosc::OscType::Float(instrument.amp_envelope.release));
             // Output to source_out_bus
             args.push(rosc::OscType::String("out".to_string()));
             args.push(rosc::OscType::Float(source_out_bus as f32));
@@ -842,11 +842,11 @@ impl AudioEngine {
         offset_secs: f64,
         state: &InstrumentState,
     ) -> Result<(), String> {
-        let strip = state.instrument(instrument_id)
-            .ok_or_else(|| format!("No strip with id {}", instrument_id))?;
+        let instrument = state.instrument(instrument_id)
+            .ok_or_else(|| format!("No instrument with id {}", instrument_id))?;
 
-        let sampler_config = strip.sampler_config.as_ref()
-            .ok_or("Sampler strip has no sampler config")?;
+        let sampler_config = instrument.sampler_config.as_ref()
+            .ok_or("Sampler instrument has no sampler config")?;
 
         let buffer_id = sampler_config.buffer_id
             .ok_or("Sampler has no buffer loaded")?;
@@ -946,7 +946,7 @@ impl AudioEngine {
             ];
 
             // Get rate and amp from source params
-            let rate = strip.source_params.iter()
+            let rate = instrument.source_params.iter()
                 .find(|p| p.name == "rate")
                 .map(|p| match &p.value {
                     ParamValue::Float(v) => *v,
@@ -954,7 +954,7 @@ impl AudioEngine {
                 })
                 .unwrap_or(1.0);
 
-            let amp = strip.source_params.iter()
+            let amp = instrument.source_params.iter()
                 .find(|p| p.name == "amp")
                 .map(|p| match &p.value {
                     ParamValue::Float(v) => *v,
@@ -990,13 +990,13 @@ impl AudioEngine {
 
             // Amp envelope (ADSR)
             args.push(rosc::OscType::String("attack".to_string()));
-            args.push(rosc::OscType::Float(strip.amp_envelope.attack));
+            args.push(rosc::OscType::Float(instrument.amp_envelope.attack));
             args.push(rosc::OscType::String("decay".to_string()));
-            args.push(rosc::OscType::Float(strip.amp_envelope.decay));
+            args.push(rosc::OscType::Float(instrument.amp_envelope.decay));
             args.push(rosc::OscType::String("sustain".to_string()));
-            args.push(rosc::OscType::Float(strip.amp_envelope.sustain));
+            args.push(rosc::OscType::Float(instrument.amp_envelope.sustain));
             args.push(rosc::OscType::String("release".to_string()));
-            args.push(rosc::OscType::Float(strip.amp_envelope.release));
+            args.push(rosc::OscType::Float(instrument.amp_envelope.release));
 
             // Output to source_out_bus
             args.push(rosc::OscType::String("out".to_string()));
@@ -1026,7 +1026,7 @@ impl AudioEngine {
         Ok(())
     }
 
-    /// Release a specific voice by strip and pitch (note-off)
+    /// Release a specific voice by instrument and pitch (note-off)
     pub fn release_voice(
         &mut self,
         instrument_id: InstrumentId,
@@ -1075,7 +1075,7 @@ impl AudioEngine {
         }
     }
 
-    /// Play a one-shot drum sample routed through a strip's signal chain
+    /// Play a one-shot drum sample routed through an instrument's signal chain
     pub fn play_drum_hit_to_instrument(
         &mut self,
         buffer_id: BufferId,
@@ -1105,7 +1105,7 @@ impl AudioEngine {
                     rosc::OscType::String("amp".to_string()),
                     rosc::OscType::Float(amp),
                     rosc::OscType::String("out".to_string()),
-                    rosc::OscType::Int(out_bus), // Route to strip's source bus
+                    rosc::OscType::Int(out_bus), // Route to instrument's source bus
                 ],
             )
             .map_err(|e| e.to_string())?;
@@ -1124,7 +1124,7 @@ impl AudioEngine {
             .unwrap_or(0.0)
     }
 
-    /// Get waveform data for an audio input strip
+    /// Get waveform data for an audio input instrument
     pub fn audio_in_waveform(&self, instrument_id: u32) -> Vec<f32> {
         self.client
             .as_ref()
@@ -1251,15 +1251,15 @@ impl AudioEngine {
             }
             AutomationTarget::EffectParam(instrument_id, effect_idx, param_idx) => {
                 if let Some(nodes) = self.node_map.get(instrument_id) {
-                    let strip = state.instrument(*instrument_id);
-                    if let Some(strip) = strip {
+                    let instrument = state.instrument(*instrument_id);
+                    if let Some(instrument) = instrument {
                         // Count enabled effects before effect_idx to find the right node
-                        let enabled_idx = strip.effects.iter()
+                        let enabled_idx = instrument.effects.iter()
                             .take(*effect_idx)
                             .filter(|e| e.enabled)
                             .count();
                         if let Some(&effect_node) = nodes.effects.get(enabled_idx) {
-                            if let Some(effect) = strip.effects.get(*effect_idx) {
+                            if let Some(effect) = instrument.effects.get(*effect_idx) {
                                 if let Some(param) = effect.params.get(*param_idx) {
                                     client.set_param(effect_node, &param.name, value)
                                         .map_err(|e| e.to_string())?;

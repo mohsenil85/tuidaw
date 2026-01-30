@@ -211,7 +211,7 @@ impl Pane for FrameEditPane {
                 }
             }
             Some("cancel") => {
-                Action::Nav(NavAction::SwitchPane("rack"))
+                Action::Nav(NavAction::SwitchPane("instrument"))
             }
             _ => Action::None,
         }
