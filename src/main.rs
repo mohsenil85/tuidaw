@@ -134,8 +134,9 @@ fn run(backend: &mut RatatuiBackend) -> std::io::Result<()> {
 
         // Render
         let mut frame = backend.begin_frame()?;
-        app_frame.render(&mut frame, &state.session);
-        panes.render(&mut frame, &state);
+        let area = frame.area();
+        app_frame.render_buf(area, frame.buffer_mut(), &state.session);
+        panes.render(area, frame.buffer_mut(), &state);
         backend.end_frame(frame)?;
     }
 

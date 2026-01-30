@@ -1,7 +1,13 @@
 use std::any::Any;
 
+use ratatui::buffer::Buffer;
+use ratatui::layout::Rect as RatatuiRect;
+use ratatui::text::{Line, Span};
+use ratatui::widgets::{Block, Borders, Paragraph, Widget};
+
 use crate::state::{AppState, MixerSelection, OutputTarget};
-use crate::ui::{Action, Color, Graphics, InputEvent, Keymap, MixerAction, Pane, Rect, Style};
+use crate::ui::layout_helpers::center_rect;
+use crate::ui::{Action, Color, InputEvent, Keymap, MixerAction, Pane, Style};
 
 const CHANNEL_WIDTH: u16 = 8;
 const METER_HEIGHT: u16 = 12;
@@ -41,31 +47,6 @@ impl MixerPane {
             Color::METER_MID
         } else {
             Color::METER_LOW
-        }
-    }
-
-    fn render_vertical_meter(g: &mut dyn Graphics, x: u16, top_y: u16, height: u16, level: f32) {
-        let total_sub = height as f32 * 8.0;
-        let filled_sub = (level * total_sub) as u16;
-
-        for row in 0..height {
-            let inverted_row = height - 1 - row;
-            let y = top_y + row;
-            let row_start = inverted_row * 8;
-            let row_end = row_start + 8;
-            let color = Self::meter_color(inverted_row, height);
-
-            if filled_sub >= row_end {
-                g.set_style(Style::new().fg(color));
-                g.put_char(x, y, '\u{2588}');
-            } else if filled_sub > row_start {
-                let sub_level = (filled_sub - row_start) as usize;
-                g.set_style(Style::new().fg(color));
-                g.put_char(x, y, BLOCK_CHARS[sub_level.saturating_sub(1).min(7)]);
-            } else {
-                g.set_style(Style::new().fg(Color::DARK_GRAY));
-                g.put_char(x, y, '\u{00b7}');
-            }
         }
     }
 
@@ -168,8 +149,8 @@ impl Pane for MixerPane {
         }
     }
 
-    fn render(&self, g: &mut dyn Graphics, state: &AppState) {
-        self.render_mixer(g, state);
+    fn render(&self, area: RatatuiRect, buf: &mut Buffer, state: &AppState) {
+        self.render_mixer_buf(buf, area, state);
     }
 
     fn keymap(&self) -> &Keymap {
@@ -190,17 +171,19 @@ impl MixerPane {
         }
     }
 
-    fn render_mixer(&self, g: &mut dyn Graphics, state: &AppState) {
-        let (width, height) = g.size();
-
+    fn render_mixer_buf(&self, buf: &mut Buffer, area: RatatuiRect, state: &AppState) {
         let box_width = (NUM_VISIBLE_CHANNELS as u16 * CHANNEL_WIDTH) + 2 +
                         (NUM_VISIBLE_BUSES as u16 * CHANNEL_WIDTH) + 2 +
                         CHANNEL_WIDTH + 4;
         let box_height = METER_HEIGHT + 8;
-        let rect = Rect::centered(width, height, box_width, box_height);
+        let rect = center_rect(area, box_width, box_height);
 
-        g.set_style(Style::new().fg(Color::CYAN));
-        g.draw_box(rect, Some(" MIXER "));
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .title(" MIXER ")
+            .border_style(ratatui::style::Style::from(Style::new().fg(Color::CYAN)))
+            .title_style(ratatui::style::Style::from(Style::new().fg(Color::CYAN)));
+        block.render(rect, buf);
 
         let base_x = rect.x + 2;
         let base_y = rect.y + 1;
@@ -229,22 +212,21 @@ impl MixerPane {
 
         let mut x = base_x;
 
-        // Render instrument channels (filled + empty slots)
+        // Render instrument channels
         for i in 0..NUM_VISIBLE_CHANNELS {
             let idx = instrument_scroll + i;
             if idx < state.instruments.instruments.len() {
                 let instrument = &state.instruments.instruments[idx];
                 let is_selected = matches!(state.session.mixer_selection, MixerSelection::Instrument(s) if s == idx);
 
-                self.render_vertical_channel(
-                    g, x, &format!("I{}", instrument.id), &instrument.name,
+                Self::render_channel_buf(
+                    buf, x, &format!("I{}", instrument.id), &instrument.name,
                     instrument.level, instrument.mute, instrument.solo, Some(instrument.output_target), is_selected,
                     label_y, name_y, meter_top_y, db_y, indicator_y, output_y,
                 );
             } else {
-                // Empty unallocated channel slot
-                self.render_empty_channel(
-                    g, x, &format!("I{}", idx + 1),
+                Self::render_empty_channel_buf(
+                    buf, x, &format!("I{}", idx + 1),
                     label_y, name_y, meter_top_y, db_y, indicator_y,
                 );
             }
@@ -253,9 +235,11 @@ impl MixerPane {
         }
 
         // Separator before buses
-        g.set_style(Style::new().fg(Color::PURPLE));
+        let purple_style = ratatui::style::Style::from(Style::new().fg(Color::PURPLE));
         for y in label_y..=output_y {
-            g.put_char(x, y, '\u{2502}');
+            if let Some(cell) = buf.cell_mut((x, y)) {
+                cell.set_char('│').set_style(purple_style);
+            }
         }
         x += 2;
 
@@ -268,8 +252,8 @@ impl MixerPane {
             let bus = &state.session.buses[bus_idx];
             let is_selected = matches!(state.session.mixer_selection, MixerSelection::Bus(id) if id == bus.id);
 
-            self.render_vertical_channel(
-                g, x, &format!("BUS{}", bus.id), &bus.name,
+            Self::render_channel_buf(
+                buf, x, &format!("BUS{}", bus.id), &bus.name,
                 bus.level, bus.mute, bus.solo, None, is_selected,
                 label_y, name_y, meter_top_y, db_y, indicator_y, output_y,
             );
@@ -278,16 +262,18 @@ impl MixerPane {
         }
 
         // Separator before master
-        g.set_style(Style::new().fg(Color::GOLD));
+        let gold_style = ratatui::style::Style::from(Style::new().fg(Color::GOLD));
         for y in label_y..=output_y {
-            g.put_char(x, y, '\u{2502}');
+            if let Some(cell) = buf.cell_mut((x, y)) {
+                cell.set_char('│').set_style(gold_style);
+            }
         }
         x += 2;
 
         // Master
         let is_master_selected = matches!(state.session.mixer_selection, MixerSelection::Master);
-        self.render_vertical_channel(
-            g, x, "MASTER", "",
+        Self::render_channel_buf(
+            buf, x, "MASTER", "",
             state.session.master_level, state.session.master_mute, false, None, is_master_selected,
             label_y, name_y, meter_top_y, db_y, indicator_y, output_y,
         );
@@ -299,9 +285,11 @@ impl MixerPane {
                 if let Some(instrument) = state.instruments.instruments.get(idx) {
                     if let Some(send) = instrument.sends.iter().find(|s| s.bus_id == bus_id) {
                         let status = if send.enabled { "ON" } else { "OFF" };
-                        let info = format!("Send\u{2192}B{}: {:.0}% [{}]", bus_id, send.level * 100.0, status);
-                        g.set_style(Style::new().fg(Color::TEAL).bold());
-                        g.put_str(base_x, send_y, &info);
+                        let info = format!("Send→B{}: {:.0}% [{}]", bus_id, send.level * 100.0, status);
+                        Paragraph::new(Line::from(Span::styled(
+                            info,
+                            ratatui::style::Style::from(Style::new().fg(Color::TEAL).bold()),
+                        ))).render(RatatuiRect::new(base_x, send_y, rect.width.saturating_sub(4), 1), buf);
                     }
                 }
             }
@@ -309,18 +297,15 @@ impl MixerPane {
 
         // Help text
         let help_y = rect.y + rect.height - 2;
-        g.set_style(Style::new().fg(Color::DARK_GRAY));
-        g.put_str(
-            base_x,
-            help_y,
+        Paragraph::new(Line::from(Span::styled(
             "[\u{2190}/\u{2192}] Select  [\u{2191}/\u{2193}] Level  [M]ute [S]olo [o]ut  [t/T] Send  [g] Toggle",
-        );
+            ratatui::style::Style::from(Style::new().fg(Color::DARK_GRAY)),
+        ))).render(RatatuiRect::new(base_x, help_y, rect.width.saturating_sub(4), 1), buf);
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn render_vertical_channel(
-        &self,
-        g: &mut dyn Graphics,
+    fn render_channel_buf(
+        buf: &mut Buffer,
         x: u16,
         label: &str,
         name: &str,
@@ -339,75 +324,91 @@ impl MixerPane {
         let channel_w = (CHANNEL_WIDTH - 1) as usize;
 
         let label_style = if selected {
-            Style::new().fg(Color::WHITE).bg(Color::SELECTION_BG).bold()
+            ratatui::style::Style::from(Style::new().fg(Color::WHITE).bg(Color::SELECTION_BG).bold())
         } else if label.starts_with("BUS") {
-            Style::new().fg(Color::PURPLE).bold()
+            ratatui::style::Style::from(Style::new().fg(Color::PURPLE).bold())
         } else if label == "MASTER" {
-            Style::new().fg(Color::GOLD).bold()
+            ratatui::style::Style::from(Style::new().fg(Color::GOLD).bold())
         } else {
-            Style::new().fg(Color::CYAN)
+            ratatui::style::Style::from(Style::new().fg(Color::CYAN))
         };
-        g.set_style(label_style);
-        let label_str: String = label.chars().take(channel_w).collect();
-        g.put_str(x, label_y, &label_str);
-
-        let text_style = if selected {
-            Style::new().fg(Color::WHITE).bg(Color::SELECTION_BG)
-        } else {
-            Style::new().fg(Color::DARK_GRAY)
-        };
-        g.set_style(text_style);
-        let name_display = if name.is_empty() && label.starts_with("I") {
-            "---"
-        } else {
-            name
-        };
-        let name_str: String = name_display.chars().take(channel_w).collect();
-        g.put_str(x, name_y, &name_str);
-
-        let meter_x = x + (CHANNEL_WIDTH / 2).saturating_sub(1);
-        Self::render_vertical_meter(g, meter_x, meter_top_y, METER_HEIGHT, level);
-
-        if selected {
-            let sel_x = meter_x + 1;
-            g.set_style(Style::new().fg(Color::WHITE).bold());
-            g.put_char(sel_x, meter_top_y, '\u{25bc}');
+        for (j, ch) in label.chars().take(channel_w).enumerate() {
+            if let Some(cell) = buf.cell_mut((x + j as u16, label_y)) {
+                cell.set_char(ch).set_style(label_style);
+            }
         }
 
+        let text_style = if selected {
+            ratatui::style::Style::from(Style::new().fg(Color::WHITE).bg(Color::SELECTION_BG))
+        } else {
+            ratatui::style::Style::from(Style::new().fg(Color::DARK_GRAY))
+        };
+        let name_display = if name.is_empty() && label.starts_with('I') { "---" } else { name };
+        for (j, ch) in name_display.chars().take(channel_w).enumerate() {
+            if let Some(cell) = buf.cell_mut((x + j as u16, name_y)) {
+                cell.set_char(ch).set_style(text_style);
+            }
+        }
+
+        // Vertical meter
+        let meter_x = x + (CHANNEL_WIDTH / 2).saturating_sub(1);
+        Self::render_meter_buf(buf, meter_x, meter_top_y, METER_HEIGHT, level);
+
+        // Selection indicator
+        if selected {
+            let sel_x = meter_x + 1;
+            if let Some(cell) = buf.cell_mut((sel_x, meter_top_y)) {
+                cell.set_char('▼').set_style(
+                    ratatui::style::Style::from(Style::new().fg(Color::WHITE).bold()),
+                );
+            }
+        }
+
+        // dB display
         let db_style = if selected {
-            Style::new().fg(Color::WHITE).bg(Color::SELECTION_BG)
+            ratatui::style::Style::from(Style::new().fg(Color::WHITE).bg(Color::SELECTION_BG))
         } else {
-            Style::new().fg(Color::SKY_BLUE)
+            ratatui::style::Style::from(Style::new().fg(Color::SKY_BLUE))
         };
-        g.set_style(db_style);
         let db_str = Self::level_to_db(level);
-        g.put_str(x, db_y, &db_str);
+        for (j, ch) in db_str.chars().enumerate() {
+            if let Some(cell) = buf.cell_mut((x + j as u16, db_y)) {
+                cell.set_char(ch).set_style(db_style);
+            }
+        }
 
+        // Mute/Solo indicator
         let (indicator, indicator_style) = if mute {
-            ("M", Style::new().fg(Color::MUTE_COLOR).bold())
+            ("M", ratatui::style::Style::from(Style::new().fg(Color::MUTE_COLOR).bold()))
         } else if solo {
-            ("S", Style::new().fg(Color::SOLO_COLOR).bold())
+            ("S", ratatui::style::Style::from(Style::new().fg(Color::SOLO_COLOR).bold()))
         } else {
-            ("\u{25cf}", Style::new().fg(Color::DARK_GRAY))
+            ("●", ratatui::style::Style::from(Style::new().fg(Color::DARK_GRAY)))
         };
-        g.set_style(indicator_style);
-        g.put_str(x, indicator_y, indicator);
+        for (j, ch) in indicator.chars().enumerate() {
+            if let Some(cell) = buf.cell_mut((x + j as u16, indicator_y)) {
+                cell.set_char(ch).set_style(indicator_style);
+            }
+        }
 
+        // Output routing
         if let Some(target) = output {
             let routing_style = if selected {
-                Style::new().fg(Color::WHITE).bg(Color::SELECTION_BG)
+                ratatui::style::Style::from(Style::new().fg(Color::WHITE).bg(Color::SELECTION_BG))
             } else {
-                Style::new().fg(Color::TEAL)
+                ratatui::style::Style::from(Style::new().fg(Color::TEAL))
             };
-            g.set_style(routing_style);
-            g.put_str(x, output_y, Self::format_output(target));
+            for (j, ch) in Self::format_output(target).chars().enumerate() {
+                if let Some(cell) = buf.cell_mut((x + j as u16, output_y)) {
+                    cell.set_char(ch).set_style(routing_style);
+                }
+            }
         }
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn render_empty_channel(
-        &self,
-        g: &mut dyn Graphics,
+    fn render_empty_channel_buf(
+        buf: &mut Buffer,
         x: u16,
         label: &str,
         label_y: u16,
@@ -417,20 +418,61 @@ impl MixerPane {
         indicator_y: u16,
     ) {
         let channel_w = (CHANNEL_WIDTH - 1) as usize;
+        let dark_gray = ratatui::style::Style::from(Style::new().fg(Color::DARK_GRAY));
 
-        g.set_style(Style::new().fg(Color::DARK_GRAY));
-        let label_str: String = label.chars().take(channel_w).collect();
-        g.put_str(x, label_y, &label_str);
-        g.put_str(x, name_y, "---");
+        for (j, ch) in label.chars().take(channel_w).enumerate() {
+            if let Some(cell) = buf.cell_mut((x + j as u16, label_y)) {
+                cell.set_char(ch).set_style(dark_gray);
+            }
+        }
+        for (j, ch) in "---".chars().enumerate() {
+            if let Some(cell) = buf.cell_mut((x + j as u16, name_y)) {
+                cell.set_char(ch).set_style(dark_gray);
+            }
+        }
 
         let meter_x = x + (CHANNEL_WIDTH / 2).saturating_sub(1);
         for row in 0..METER_HEIGHT {
-            g.set_style(Style::new().fg(Color::DARK_GRAY));
-            g.put_char(meter_x, meter_top_y + row, '\u{00b7}');
+            if let Some(cell) = buf.cell_mut((meter_x, meter_top_y + row)) {
+                cell.set_char('·').set_style(dark_gray);
+            }
         }
 
-        g.set_style(Style::new().fg(Color::DARK_GRAY));
-        g.put_str(x, db_y, "--");
-        g.put_str(x, indicator_y, "\u{25cf}");
+        for (j, ch) in "--".chars().enumerate() {
+            if let Some(cell) = buf.cell_mut((x + j as u16, db_y)) {
+                cell.set_char(ch).set_style(dark_gray);
+            }
+        }
+        for (j, ch) in "●".chars().enumerate() {
+            if let Some(cell) = buf.cell_mut((x + j as u16, indicator_y)) {
+                cell.set_char(ch).set_style(dark_gray);
+            }
+        }
+    }
+
+    fn render_meter_buf(buf: &mut Buffer, x: u16, top_y: u16, height: u16, level: f32) {
+        let total_sub = height as f32 * 8.0;
+        let filled_sub = (level * total_sub) as u16;
+
+        for row in 0..height {
+            let inverted_row = height - 1 - row;
+            let y = top_y + row;
+            let row_start = inverted_row * 8;
+            let row_end = row_start + 8;
+            let color = Self::meter_color(inverted_row, height);
+
+            let (ch, c) = if filled_sub >= row_end {
+                ('\u{2588}', color)
+            } else if filled_sub > row_start {
+                let sub_level = (filled_sub - row_start) as usize;
+                (BLOCK_CHARS[sub_level.saturating_sub(1).min(7)], color)
+            } else {
+                ('·', Color::DARK_GRAY)
+            };
+
+            if let Some(cell) = buf.cell_mut((x, y)) {
+                cell.set_char(ch).set_style(ratatui::style::Style::from(Style::new().fg(c)));
+            }
+        }
     }
 }

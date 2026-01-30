@@ -1,6 +1,11 @@
 use std::collections::VecDeque;
 
-use super::{Color, Graphics, Rect, Style};
+use ratatui::buffer::Buffer;
+use ratatui::layout::Rect as RatatuiRect;
+use ratatui::text::{Line, Span};
+use ratatui::widgets::{Block, Borders, Paragraph, Widget};
+
+use super::{Color, Style};
 use crate::state::SessionState;
 
 const CONSOLE_LINES: u16 = 4;
@@ -77,11 +82,87 @@ impl Frame {
         }
     }
 
-    /// Render vertical master meter on the right side of the frame
-    fn render_master_meter(&self, g: &mut dyn Graphics, width: u16, _height: u16, sep_y: u16) {
-        // Meter column: 2 chars from right border (border + 1 padding)
+    /// Render the frame using ratatui buffer directly.
+    pub fn render_buf(&self, area: RatatuiRect, buf: &mut Buffer, session: &SessionState) {
+        if area.width < 10 || area.height < 10 {
+            return;
+        }
+
+        let border_style = ratatui::style::Style::from(Style::new().fg(Color::GRAY));
+
+        // Outer border
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .border_style(border_style);
+        block.render(area, buf);
+
+        // Header line in the top border
+        let snap_text = if session.snap { "ON" } else { "OFF" };
+        let tuning_str = format!("A{:.0}", session.tuning_a4);
+        let header = format!(
+            " TUIDAW - {}     Key: {}  Scale: {}  BPM: {}  {}/{}  Tuning: {}  [Snap: {}] ",
+            self.project_name, session.key.name(), session.scale.name(), session.bpm,
+            session.time_signature.0, session.time_signature.1,
+            tuning_str, snap_text,
+        );
+        let header_style = ratatui::style::Style::from(Style::new().fg(Color::CYAN).bold());
+        Paragraph::new(Line::from(Span::styled(&header, header_style)))
+            .render(RatatuiRect::new(area.x + 1, area.y, area.width.saturating_sub(2), 1), buf);
+
+        // Fill remaining top border after header
+        let header_end = area.x + 1 + header.len() as u16;
+        for x in header_end..area.x + area.width.saturating_sub(1) {
+            if let Some(cell) = buf.cell_mut((x, area.y)) {
+                cell.set_char('─').set_style(border_style);
+            }
+        }
+
+        // Console separator line
+        let sep_y = area.y + area.height.saturating_sub(CONSOLE_LINES + 2);
+        if let Some(cell) = buf.cell_mut((area.x, sep_y)) {
+            cell.set_char('├').set_style(border_style);
+        }
+        for x in (area.x + 1)..(area.x + area.width.saturating_sub(1)) {
+            if let Some(cell) = buf.cell_mut((x, sep_y)) {
+                cell.set_char('─').set_style(border_style);
+            }
+        }
+        if let Some(cell) = buf.cell_mut((area.x + area.width.saturating_sub(1), sep_y)) {
+            cell.set_char('┤').set_style(border_style);
+        }
+
+        // Master meter (direct buffer writes)
+        self.render_master_meter_buf(buf, area.width, area.height, sep_y);
+
+        // Console messages
+        let console_y = sep_y + 1;
+        let msg_count = self.messages.len();
+        let skip = msg_count.saturating_sub(CONSOLE_LINES as usize);
+        let max_width = (area.width - 4) as usize;
+
+        let prompt_style = ratatui::style::Style::from(Style::new().fg(Color::DARK_GRAY));
+        let msg_style = ratatui::style::Style::from(Style::new().fg(Color::SKY_BLUE));
+
+        for (i, msg) in self.messages.iter().skip(skip).enumerate() {
+            if i >= CONSOLE_LINES as usize {
+                break;
+            }
+            let y = console_y + i as u16;
+            let truncated: String = msg.chars().take(max_width).collect();
+            let line = Line::from(vec![
+                Span::styled("> ", prompt_style),
+                Span::styled(truncated, msg_style),
+            ]);
+            Paragraph::new(line).render(
+                RatatuiRect::new(area.x + 2, y, area.width.saturating_sub(4), 1), buf,
+            );
+        }
+    }
+
+    /// Render vertical master meter on the right side (buffer version)
+    fn render_master_meter_buf(&self, buf: &mut Buffer, width: u16, _height: u16, sep_y: u16) {
         let meter_x = width.saturating_sub(3);
-        let meter_top = 2_u16; // below header
+        let meter_top = 2_u16;
         let meter_height = sep_y.saturating_sub(meter_top + 1);
 
         if meter_height < 3 {
@@ -95,116 +176,47 @@ impl Frame {
         for row in 0..meter_height {
             let inverted_row = meter_height - 1 - row;
             let y = meter_top + row;
-
             let row_start = inverted_row * 8;
             let row_end = row_start + 8;
-
             let color = Self::meter_color(inverted_row, meter_height);
 
-            if filled_sub >= row_end {
-                g.set_style(Style::new().fg(color));
-                g.put_char(meter_x, y, '█');
+            let (ch, c) = if filled_sub >= row_end {
+                ('█', color)
             } else if filled_sub > row_start {
                 let sub_level = (filled_sub - row_start) as usize;
-                g.set_style(Style::new().fg(color));
-                g.put_char(meter_x, y, BLOCK_CHARS[sub_level.saturating_sub(1).min(7)]);
+                (BLOCK_CHARS[sub_level.saturating_sub(1).min(7)], color)
             } else {
-                g.set_style(Style::new().fg(Color::DARK_GRAY));
-                g.put_char(meter_x, y, '·');
+                ('·', Color::DARK_GRAY)
+            };
+
+            if let Some(cell) = buf.cell_mut((meter_x, y)) {
+                cell.set_char(ch).set_style(ratatui::style::Style::from(Style::new().fg(c)));
             }
         }
 
         // Label below meter
         let label_y = meter_top + meter_height;
         if self.master_mute {
-            g.set_style(Style::new().fg(Color::MUTE_COLOR).bold());
-            g.put_char(meter_x, label_y, 'M');
+            if let Some(cell) = buf.cell_mut((meter_x, label_y)) {
+                cell.set_char('M').set_style(
+                    ratatui::style::Style::from(Style::new().fg(Color::MUTE_COLOR).bold()),
+                );
+            }
         } else {
-            // dB value
             let db = if level <= 0.0 {
                 "-∞".to_string()
             } else {
-                let db = 20.0 * level.log10();
-                format!("{:+.0}", db.max(-99.0))
+                let db_val = 20.0 * level.log10();
+                format!("{:+.0}", db_val.max(-99.0))
             };
-            g.set_style(Style::new().fg(Color::DARK_GRAY));
-            // Right-align in the available space
+            let db_style = ratatui::style::Style::from(Style::new().fg(Color::DARK_GRAY));
             let db_x = meter_x.saturating_sub(db.len() as u16 - 1);
-            g.put_str(db_x, label_y, &db);
-        }
-    }
-
-    /// Calculate the inner rect where pane content should render
-    #[allow(dead_code)]
-    pub fn inner_rect(width: u16, height: u16) -> Rect {
-        // Inset: 1 left, 1 right, 1 top (border+header), CONSOLE_LINES+2 bottom (separator+console+border)
-        let inner_x = 1;
-        let inner_y = 2;
-        let inner_w = width.saturating_sub(2);
-        let inner_h = height.saturating_sub(2 + CONSOLE_LINES + 2);
-        Rect::new(inner_x, inner_y, inner_w, inner_h)
-    }
-
-    /// Render the frame (border, header, console) around pane content.
-    /// Takes a reference to SessionState for displaying BPM, key, scale, etc.
-    pub fn render(&self, g: &mut dyn Graphics, session: &SessionState) {
-        let (width, height) = g.size();
-        if width < 10 || height < 10 {
-            return;
-        }
-
-        // Outer border
-        let rect = Rect::new(0, 0, width, height);
-        g.set_style(Style::new().fg(Color::GRAY));
-        g.draw_box(rect, None);
-
-        // Top bar
-        let snap_text = if session.snap { "ON" } else { "OFF" };
-        let tuning_str = format!("A{:.0}", session.tuning_a4);
-        let header = format!(
-            " TUIDAW - {}     Key: {}  Scale: {}  BPM: {}  {}/{}  Tuning: {}  [Snap: {}] ",
-            self.project_name, session.key.name(), session.scale.name(), session.bpm,
-            session.time_signature.0, session.time_signature.1,
-            tuning_str, snap_text,
-        );
-        g.set_style(Style::new().fg(Color::CYAN).bold());
-        g.put_str(1, 0, &header);
-
-        // Fill remaining top border after header with horizontal line
-        let header_end = 1 + header.len() as u16;
-        g.set_style(Style::new().fg(Color::GRAY));
-        for x in header_end..width.saturating_sub(1) {
-            g.put_char(x, 0, '─');
-        }
-
-        // Console separator line
-        let sep_y = height.saturating_sub(CONSOLE_LINES + 2);
-        g.set_style(Style::new().fg(Color::GRAY));
-        g.put_char(0, sep_y, '├');
-        for x in 1..width.saturating_sub(1) {
-            g.put_char(x, sep_y, '─');
-        }
-        g.put_char(width.saturating_sub(1), sep_y, '┤');
-
-        // Master meter (right side, inside border)
-        self.render_master_meter(g, width, height, sep_y);
-
-        // Console messages (last CONSOLE_LINES messages)
-        let console_y = sep_y + 1;
-        let msg_count = self.messages.len();
-        let skip = msg_count.saturating_sub(CONSOLE_LINES as usize);
-        let max_width = (width - 4) as usize;
-
-        for (i, msg) in self.messages.iter().skip(skip).enumerate() {
-            if i >= CONSOLE_LINES as usize {
-                break;
+            for (j, ch) in db.chars().enumerate() {
+                if let Some(cell) = buf.cell_mut((db_x + j as u16, label_y)) {
+                    cell.set_char(ch).set_style(db_style);
+                }
             }
-            let y = console_y + i as u16;
-            g.set_style(Style::new().fg(Color::DARK_GRAY));
-            g.put_str(2, y, "> ");
-            g.set_style(Style::new().fg(Color::SKY_BLUE));
-            let truncated: String = msg.chars().take(max_width).collect();
-            g.put_str(4, y, &truncated);
         }
     }
+
 }

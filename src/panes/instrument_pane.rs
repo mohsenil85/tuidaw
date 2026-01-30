@@ -1,7 +1,13 @@
 use std::any::Any;
 
+use ratatui::buffer::Buffer;
+use ratatui::layout::Rect as RatatuiRect;
+use ratatui::text::{Line, Span};
+use ratatui::widgets::{Block, Borders, Paragraph, Widget};
+
 use crate::state::{AppState, SourceType};
-use crate::ui::{Action, NavAction, InstrumentAction, SessionAction, Color, Graphics, InputEvent, KeyCode, Keymap, PadKeyboard, Pane, PianoKeyboard, Rect, Style};
+use crate::ui::layout_helpers::center_rect;
+use crate::ui::{Action, NavAction, InstrumentAction, SessionAction, Color, InputEvent, KeyCode, Keymap, PadKeyboard, Pane, PianoKeyboard, Style};
 
 fn source_color(source: SourceType) -> Color {
     match source {
@@ -161,32 +167,39 @@ impl Pane for InstrumentPane {
         }
     }
 
-    fn render(&self, g: &mut dyn Graphics, state: &AppState) {
-        let (width, height) = g.size();
-        let box_width = 97;
-        let box_height = 29;
-        let rect = Rect::centered(width, height, box_width, box_height);
+    fn render(&self, area: RatatuiRect, buf: &mut Buffer, state: &AppState) {
+        let rect = center_rect(area, 97, 29);
 
-        g.set_style(Style::new().fg(Color::CYAN));
-        g.draw_box(rect, Some(" Instruments "));
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .title(" Instruments ")
+            .border_style(ratatui::style::Style::from(Style::new().fg(Color::CYAN)))
+            .title_style(ratatui::style::Style::from(Style::new().fg(Color::CYAN)));
+        let inner = block.inner(rect);
+        block.render(rect, buf);
 
-        let content_x = rect.x + 2;
-        let content_y = rect.y + 2;
+        let content_x = inner.x + 1;
+        let content_y = inner.y + 1;
 
-        g.set_style(Style::new().fg(Color::CYAN).bold());
-        g.put_str(content_x, content_y, "Instruments:");
+        Paragraph::new(Line::from(Span::styled(
+            "Instruments:",
+            ratatui::style::Style::from(Style::new().fg(Color::CYAN).bold()),
+        ))).render(RatatuiRect::new(content_x, content_y, inner.width.saturating_sub(2), 1), buf);
 
         let list_y = content_y + 2;
-        let max_visible = ((rect.height - 8) as usize).max(3);
+        let max_visible = ((inner.height.saturating_sub(7)) as usize).max(3);
 
         if state.instruments.instruments.is_empty() {
-            g.set_style(Style::new().fg(Color::DARK_GRAY));
-            g.put_str(content_x + 2, list_y, "(no instruments — press 'a' to add)");
+            Paragraph::new(Line::from(Span::styled(
+                "(no instruments — press 'a' to add)",
+                ratatui::style::Style::from(Style::new().fg(Color::DARK_GRAY)),
+            ))).render(RatatuiRect::new(content_x + 2, list_y, inner.width.saturating_sub(4), 1), buf);
         }
 
         let scroll_offset = state.instruments.selected
             .map(|s| if s >= max_visible { s - max_visible + 1 } else { 0 })
             .unwrap_or(0);
+        let sel_bg = ratatui::style::Style::from(Style::new().bg(Color::SELECTION_BG));
 
         for (i, instrument) in state.instruments.instruments.iter().enumerate().skip(scroll_offset) {
             let row = i - scroll_offset;
@@ -194,105 +207,103 @@ impl Pane for InstrumentPane {
                 break;
             }
             let y = list_y + row as u16;
+            if y >= inner.y + inner.height {
+                break;
+            }
             let is_selected = state.instruments.selected == Some(i);
 
             // Selection indicator
             if is_selected {
-                g.set_style(Style::new().fg(Color::WHITE).bg(Color::SELECTION_BG).bold());
-                g.put_str(content_x, y, ">");
-            } else {
-                g.set_style(Style::new().fg(Color::DARK_GRAY));
-                g.put_str(content_x, y, " ");
+                if let Some(cell) = buf.cell_mut((content_x, y)) {
+                    cell.set_char('>').set_style(
+                        ratatui::style::Style::from(Style::new().fg(Color::WHITE).bg(Color::SELECTION_BG).bold()),
+                    );
+                }
             }
 
-            // Instrument name
+            let mk_style = |fg: Color| -> ratatui::style::Style {
+                if is_selected {
+                    ratatui::style::Style::from(Style::new().fg(fg).bg(Color::SELECTION_BG))
+                } else {
+                    ratatui::style::Style::from(Style::new().fg(fg))
+                }
+            };
+
+            // Build row as a Line with multiple spans
             let name_str = format!("{:14}", &instrument.name[..instrument.name.len().min(14)]);
-            if is_selected {
-                g.set_style(Style::new().fg(Color::WHITE).bg(Color::SELECTION_BG));
-            } else {
-                g.set_style(Style::new().fg(Color::WHITE));
-            }
-            g.put_str(content_x + 2, y, &name_str);
+            let osc_str = format!(" {:10}", instrument.source.name());
+            let filter_str = format!(" {:12}", Self::format_filter(instrument));
+            let fx_raw = Self::format_effects(instrument);
+            let fx_str = format!(" {:18}", &fx_raw[..fx_raw.len().min(18)]);
+            let level_str = format!(" {}", Self::format_level(instrument.level));
 
-            // Osc type
             let osc_c = source_color(instrument.source);
-            if is_selected {
-                g.set_style(Style::new().fg(osc_c).bg(Color::SELECTION_BG));
-            } else {
-                g.set_style(Style::new().fg(osc_c));
-            }
-            g.put_str(content_x + 17, y, &format!("{:10}", instrument.source.name()));
 
-            // Filter
-            let filter_str = Self::format_filter(instrument);
-            if is_selected {
-                g.set_style(Style::new().fg(Color::FILTER_COLOR).bg(Color::SELECTION_BG));
-            } else {
-                g.set_style(Style::new().fg(Color::FILTER_COLOR));
-            }
-            g.put_str(content_x + 28, y, &format!("{:12}", filter_str));
+            let line = Line::from(vec![
+                Span::styled(name_str, mk_style(Color::WHITE)),
+                Span::styled(osc_str, mk_style(osc_c)),
+                Span::styled(filter_str, mk_style(Color::FILTER_COLOR)),
+                Span::styled(fx_str, mk_style(Color::FX_COLOR)),
+                Span::styled(level_str, mk_style(Color::LIME)),
+            ]);
+            let line_width = inner.width.saturating_sub(3);
+            Paragraph::new(line).render(
+                RatatuiRect::new(content_x + 2, y, line_width, 1), buf,
+            );
 
-            // Effects
-            let fx_str = Self::format_effects(instrument);
+            // Fill rest of line with selection bg
             if is_selected {
-                g.set_style(Style::new().fg(Color::FX_COLOR).bg(Color::SELECTION_BG));
-            } else {
-                g.set_style(Style::new().fg(Color::FX_COLOR));
-            }
-            g.put_str(content_x + 41, y, &format!("{:18}", &fx_str[..fx_str.len().min(18)]));
-
-            // Level bar
-            let level_str = Self::format_level(instrument.level);
-            if is_selected {
-                g.set_style(Style::new().fg(Color::LIME).bg(Color::SELECTION_BG));
-            } else {
-                g.set_style(Style::new().fg(Color::LIME));
-            }
-            g.put_str(content_x + 60, y, &level_str);
-
-            // Clear to end if selected
-            if is_selected {
-                g.set_style(Style::new().bg(Color::SELECTION_BG));
-                let line_end = content_x + 60 + level_str.len() as u16;
-                for x in line_end..(rect.x + rect.width - 2) {
-                    g.put_char(x, y, ' ');
+                let fill_start = content_x + 2 + line_width;
+                let fill_end = inner.x + inner.width;
+                for x in fill_start..fill_end {
+                    if let Some(cell) = buf.cell_mut((x, y)) {
+                        cell.set_char(' ').set_style(sel_bg);
+                    }
                 }
             }
         }
 
         // Scroll indicators
+        let scroll_style = ratatui::style::Style::from(Style::new().fg(Color::ORANGE));
         if scroll_offset > 0 {
-            g.set_style(Style::new().fg(Color::ORANGE));
-            g.put_str(rect.x + rect.width - 4, list_y, "...");
+            Paragraph::new(Line::from(Span::styled("...", scroll_style)))
+                .render(RatatuiRect::new(rect.x + rect.width - 5, list_y, 3, 1), buf);
         }
         if scroll_offset + max_visible < state.instruments.instruments.len() {
-            g.set_style(Style::new().fg(Color::ORANGE));
-            g.put_str(rect.x + rect.width - 4, list_y + max_visible as u16 - 1, "...");
+            Paragraph::new(Line::from(Span::styled("...", scroll_style)))
+                .render(RatatuiRect::new(rect.x + rect.width - 5, list_y + max_visible as u16 - 1, 3, 1), buf);
         }
 
         // Piano/Pad mode indicator
         if self.pad_keyboard.is_active() {
-            g.set_style(Style::new().fg(Color::BLACK).bg(Color::KIT_COLOR));
             let pad_str = self.pad_keyboard.status_label();
             let pad_x = rect.x + rect.width - pad_str.len() as u16 - 1;
-            g.put_str(pad_x, rect.y, &pad_str);
+            Paragraph::new(Line::from(Span::styled(
+                pad_str.clone(),
+                ratatui::style::Style::from(Style::new().fg(Color::BLACK).bg(Color::KIT_COLOR)),
+            ))).render(RatatuiRect::new(pad_x, rect.y, pad_str.len() as u16, 1), buf);
         } else if self.piano.is_active() {
-            g.set_style(Style::new().fg(Color::BLACK).bg(Color::PINK));
             let piano_str = self.piano.status_label();
             let piano_x = rect.x + rect.width - piano_str.len() as u16 - 1;
-            g.put_str(piano_x, rect.y, &piano_str);
+            Paragraph::new(Line::from(Span::styled(
+                piano_str.clone(),
+                ratatui::style::Style::from(Style::new().fg(Color::BLACK).bg(Color::PINK)),
+            ))).render(RatatuiRect::new(piano_x, rect.y, piano_str.len() as u16, 1), buf);
         }
 
         // Help text
         let help_y = rect.y + rect.height - 2;
-        g.set_style(Style::new().fg(Color::DARK_GRAY));
-        if self.pad_keyboard.is_active() {
-            g.put_str(content_x, help_y, "R T Y U / F G H J / V B N M: trigger pads | /: exit pad mode");
+        let help_text = if self.pad_keyboard.is_active() {
+            "R T Y U / F G H J / V B N M: trigger pads | /: exit pad mode"
         } else if self.piano.is_active() {
-            g.put_str(content_x, help_y, "Play keys | [/]: octave | ↑/↓: select instrument | /: cycle layout/exit");
+            "Play keys | [/]: octave | ↑/↓: select instrument | /: cycle layout/exit"
         } else {
-            g.put_str(content_x, help_y, "a: add | d: delete | Enter: edit | /: piano | w: save | o: load");
-        }
+            "a: add | d: delete | Enter: edit | /: piano | w: save | o: load"
+        };
+        Paragraph::new(Line::from(Span::styled(
+            help_text,
+            ratatui::style::Style::from(Style::new().fg(Color::DARK_GRAY)),
+        ))).render(RatatuiRect::new(content_x, help_y, inner.width.saturating_sub(2), 1), buf);
     }
 
     fn keymap(&self) -> &Keymap {

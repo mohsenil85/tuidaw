@@ -1,7 +1,13 @@
 use std::any::Any;
 
+use ratatui::buffer::Buffer;
+use ratatui::layout::Rect as RatatuiRect;
+use ratatui::text::{Line, Span};
+use ratatui::widgets::{Block, Borders, Paragraph, Widget};
+
 use crate::state::AppState;
-use crate::ui::{Action, Color, Graphics, InputEvent, Keymap, NavAction, Pane, Rect, Style};
+use crate::ui::layout_helpers::center_rect;
+use crate::ui::{Action, Color, InputEvent, Keymap, NavAction, Pane, Style};
 
 pub struct HelpPane {
     keymap: Keymap,
@@ -77,57 +83,69 @@ impl Pane for HelpPane {
         }
     }
 
-    fn render(&self, g: &mut dyn Graphics, _state: &AppState) {
-        let (width, height) = g.size();
-        let box_width = 60;
-        let box_height = 20;
-        let rect = Rect::centered(width, height, box_width, box_height);
-
+    fn render(&self, area: RatatuiRect, buf: &mut Buffer, _state: &AppState) {
+        let rect = center_rect(area, 60, 20);
         let title = format!(" Help: {} ", self.title);
-        g.set_style(Style::new().fg(Color::SKY_BLUE));
-        g.draw_box(rect, Some(&title));
 
-        let content_x = rect.x + 2;
-        let content_y = rect.y + 2;
-        let visible_lines = (rect.height - 5) as usize;
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .title(title)
+            .border_style(ratatui::style::Style::from(Style::new().fg(Color::SKY_BLUE)))
+            .title_style(ratatui::style::Style::from(Style::new().fg(Color::SKY_BLUE)));
+        let inner = block.inner(rect);
+        block.render(rect, buf);
 
-        // Clamp scroll to valid range
+        let visible_lines = inner.height.saturating_sub(4) as usize;
         let max_scroll = self.display_keymap.len().saturating_sub(visible_lines);
         let scroll = self.scroll.min(max_scroll);
 
-        // Render keymap entries
+        let key_style = ratatui::style::Style::from(Style::new().fg(Color::CYAN).bold());
+        let desc_style = ratatui::style::Style::from(Style::new().fg(Color::WHITE));
+
         for (i, (key, desc)) in self.display_keymap.iter().skip(scroll).take(visible_lines).enumerate() {
-            let y = content_y + i as u16;
+            let y = inner.y + 1 + i as u16;
+            if y >= inner.y + inner.height {
+                break;
+            }
 
-            // Key
-            g.set_style(Style::new().fg(Color::CYAN).bold());
-            g.put_str(content_x, y, key);
-
-            // Description
-            g.set_style(Style::new().fg(Color::WHITE));
-            let desc_x = content_x + 12;
-            let max_desc_len = (rect.width - 16) as usize;
+            let max_desc_len = inner.width.saturating_sub(14) as usize;
             let desc_truncated: String = desc.chars().take(max_desc_len).collect();
-            g.put_str(desc_x, y, &desc_truncated);
+
+            let line = Line::from(vec![
+                Span::styled(format!("{:<12}", key), key_style),
+                Span::styled(desc_truncated, desc_style),
+            ]);
+            let line_area = RatatuiRect::new(inner.x + 1, y, inner.width.saturating_sub(1), 1);
+            Paragraph::new(line).render(line_area, buf);
         }
 
         // Scroll indicator
         if self.display_keymap.len() > visible_lines {
             let indicator_y = rect.y + rect.height - 3;
-            g.set_style(Style::new().fg(Color::DARK_GRAY));
-            let indicator = format!(
-                "{}-{}/{}",
-                scroll + 1,
-                (scroll + visible_lines).min(self.display_keymap.len()),
-                self.display_keymap.len()
-            );
-            g.put_str(content_x, indicator_y, &indicator);
+            if indicator_y < area.y + area.height {
+                let indicator = format!(
+                    "{}-{}/{}",
+                    scroll + 1,
+                    (scroll + visible_lines).min(self.display_keymap.len()),
+                    self.display_keymap.len()
+                );
+                let ind_area = RatatuiRect::new(inner.x + 1, indicator_y, inner.width.saturating_sub(1), 1);
+                Paragraph::new(Line::from(Span::styled(
+                    indicator,
+                    ratatui::style::Style::from(Style::new().fg(Color::DARK_GRAY)),
+                ))).render(ind_area, buf);
+            }
         }
 
         // Help text at bottom
         let help_y = rect.y + rect.height - 2;
-        g.set_style(Style::new().fg(Color::DARK_GRAY));
-        g.put_str(content_x, help_y, "[ESC/F1] Close  [Up/Down] Scroll");
+        if help_y < area.y + area.height {
+            let help_area = RatatuiRect::new(inner.x + 1, help_y, inner.width.saturating_sub(1), 1);
+            Paragraph::new(Line::from(Span::styled(
+                "[ESC/F1] Close  [Up/Down] Scroll",
+                ratatui::style::Style::from(Style::new().fg(Color::DARK_GRAY)),
+            ))).render(help_area, buf);
+        }
     }
 
     fn keymap(&self) -> &Keymap {

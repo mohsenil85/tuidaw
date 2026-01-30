@@ -1,7 +1,13 @@
 use std::any::Any;
 
+use ratatui::buffer::Buffer;
+use ratatui::layout::Rect as RatatuiRect;
+use ratatui::text::{Line, Span};
+use ratatui::widgets::{Block, Borders, Paragraph, Widget};
+
 use crate::state::AppState;
-use crate::ui::{Action, Color, Graphics, InputEvent, Keymap, NavAction, Pane, Rect, Style};
+use crate::ui::layout_helpers::center_rect;
+use crate::ui::{Action, Color, InputEvent, Keymap, NavAction, Pane, Style};
 
 /// Menu item for the home screen
 struct MenuItem {
@@ -75,46 +81,65 @@ impl Pane for HomePane {
         }
     }
 
-    fn render(&self, g: &mut dyn Graphics, _state: &AppState) {
-        let (width, height) = g.size();
-        let box_width = 50;
-        let box_height = 12;
-        let rect = Rect::centered(width, height, box_width, box_height);
+    fn render(&self, area: RatatuiRect, buf: &mut Buffer, _state: &AppState) {
+        let rect = center_rect(area, 50, 12);
 
-        g.set_style(Style::new().fg(Color::MAGENTA));
-        g.draw_box(rect, Some(" TUIDAW "));
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .title(" TUIDAW ")
+            .border_style(ratatui::style::Style::from(Style::new().fg(Color::MAGENTA)))
+            .title_style(ratatui::style::Style::from(Style::new().fg(Color::MAGENTA)));
+        let inner = block.inner(rect);
+        block.render(rect, buf);
 
-        let content_x = rect.x + 3;
-        let content_y = rect.y + 2;
-
-        // Menu item colors
         let item_colors = [Color::CYAN, Color::PURPLE, Color::GOLD];
 
-        // Render menu items
         for (i, item) in self.items.iter().enumerate() {
-            let y = content_y + (i as u16 * 2);
+            let y = inner.y + 1 + (i as u16 * 2);
             let is_selected = i == self.selected;
             let item_color = item_colors.get(i).copied().unwrap_or(Color::WHITE);
 
-            // Selection indicator and label
-            if is_selected {
-                g.set_style(Style::new().fg(Color::WHITE).bg(Color::SELECTION_BG).bold());
-                g.put_str(content_x, y, &format!(" [{}] {} ", i + 1, item.label));
-                // Description on next line
-                g.set_style(Style::new().fg(Color::SKY_BLUE));
-                g.put_str(content_x + 2, y + 1, item.description);
+            let label_text = format!(" [{}] {} ", i + 1, item.label);
+
+            let label_line = if is_selected {
+                Line::from(Span::styled(
+                    label_text,
+                    ratatui::style::Style::from(Style::new().fg(Color::WHITE).bg(Color::SELECTION_BG).bold()),
+                ))
             } else {
-                g.set_style(Style::new().fg(item_color));
-                g.put_str(content_x, y, &format!(" [{}] {}", i + 1, item.label));
-                g.set_style(Style::new().fg(Color::DARK_GRAY));
-                g.put_str(content_x + 2, y + 1, item.description);
+                Line::from(Span::styled(
+                    label_text,
+                    ratatui::style::Style::from(Style::new().fg(item_color)),
+                ))
+            };
+
+            let desc_style = if is_selected {
+                ratatui::style::Style::from(Style::new().fg(Color::SKY_BLUE))
+            } else {
+                ratatui::style::Style::from(Style::new().fg(Color::DARK_GRAY))
+            };
+            let desc_line = Line::from(Span::styled(format!("  {}", item.description), desc_style));
+
+            if y < inner.y + inner.height {
+                let label_area = RatatuiRect::new(inner.x + 2, y, inner.width.saturating_sub(2), 1);
+                Paragraph::new(label_line).render(label_area, buf);
+            }
+            if y + 1 < inner.y + inner.height {
+                let desc_area = RatatuiRect::new(inner.x + 2, y + 1, inner.width.saturating_sub(2), 1);
+                Paragraph::new(desc_line).render(desc_area, buf);
             }
         }
 
         // Help text
         let help_y = rect.y + rect.height - 2;
-        g.set_style(Style::new().fg(Color::DARK_GRAY));
-        g.put_str(content_x, help_y, "[1-3] Jump  [Enter] Select  [q] Quit");
+        if help_y < area.y + area.height {
+            let help_area = RatatuiRect::new(inner.x + 2, help_y, inner.width.saturating_sub(2), 1);
+            let help = Paragraph::new(Line::from(Span::styled(
+                "[1-3] Jump  [Enter] Select  [q] Quit",
+                ratatui::style::Style::from(Style::new().fg(Color::DARK_GRAY)),
+            )));
+            help.render(help_area, buf);
+        }
     }
 
     fn keymap(&self) -> &Keymap {

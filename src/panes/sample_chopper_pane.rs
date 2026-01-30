@@ -1,9 +1,15 @@
 use std::any::Any;
 
+use ratatui::buffer::Buffer;
+use ratatui::layout::Rect as RatatuiRect;
+use ratatui::text::{Line, Span};
+use ratatui::widgets::{Block, Borders, Paragraph, Widget};
+
 use crate::panes::FileBrowserPane;
 use crate::state::AppState;
+use crate::ui::layout_helpers::center_rect;
 use crate::ui::{
-    Action, ChopperAction, Color, FileSelectAction, Graphics, InputEvent, Keymap, NavAction, Pane, Rect, Style,
+    Action, ChopperAction, Color, FileSelectAction, InputEvent, Keymap, NavAction, Pane, Style,
 };
 
 pub struct SampleChopperPane {
@@ -98,36 +104,43 @@ impl Pane for SampleChopperPane {
         }
     }
 
-    fn render(&self, g: &mut dyn Graphics, state: &AppState) {
-        let (width, height) = g.size();
-        let box_width = 97;
-        let box_height = 29;
-        let rect = Rect::centered(width, height, box_width, box_height);
+    fn render(&self, area: RatatuiRect, buf: &mut Buffer, state: &AppState) {
+        let rect = center_rect(area, 97, 29);
 
         if let Some(drum_seq) = self.selected_drum_sequencer(state) {
             if drum_seq.chopper.is_none() {
-                self.file_browser.render(g, state);
+                self.file_browser.render(area, buf, state);
                 return;
             }
         } else {
-            g.draw_box(rect, Some(" Sample Chopper "));
-            g.set_style(Style::new().fg(Color::DARK_GRAY));
-            g.put_str(
-                rect.x + 2,
-                rect.y + 2,
+            let block = Block::default()
+                .borders(Borders::ALL)
+                .title(" Sample Chopper ")
+                .border_style(ratatui::style::Style::from(Style::new().fg(Color::GRAY)))
+                .title_style(ratatui::style::Style::from(Style::new().fg(Color::GRAY)));
+            block.render(rect, buf);
+            Paragraph::new(Line::from(Span::styled(
                 "No drum machine instrument selected. Press 1 to add one.",
-            );
+                ratatui::style::Style::from(Style::new().fg(Color::DARK_GRAY)),
+            ))).render(RatatuiRect::new(rect.x + 2, rect.y + 2, rect.width.saturating_sub(4), 1), buf);
             return;
         }
 
-        g.draw_box(rect, Some(" Sample Chopper "));
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .title(" Sample Chopper ")
+            .border_style(ratatui::style::Style::from(Style::new().fg(Color::GRAY)))
+            .title_style(ratatui::style::Style::from(Style::new().fg(Color::GRAY)));
+        block.render(rect, buf);
 
         // Get chopper state
         let chopper = match self.get_chopper_state(state) {
             Some(c) => c,
             None => {
-                g.set_style(Style::new().fg(Color::DARK_GRAY));
-                g.put_str(rect.x + 2, rect.y + 2, "No sample loaded.");
+                Paragraph::new(Line::from(Span::styled(
+                    "No sample loaded.",
+                    ratatui::style::Style::from(Style::new().fg(Color::DARK_GRAY)),
+                ))).render(RatatuiRect::new(rect.x + 2, rect.y + 2, rect.width.saturating_sub(4), 1), buf);
                 return;
             }
         };
@@ -137,122 +150,149 @@ impl Pane for SampleChopperPane {
 
         // Header info
         let filename = chopper.path.as_ref()
-            .map(|p| std::path::Path::new(p).file_name().unwrap_or_default().to_string_lossy())
-            .unwrap_or("No Sample".into());
-        g.set_style(Style::new().fg(Color::CYAN).bold());
-        g.put_str(content_x, content_y, &filename);
-        
-        g.set_style(Style::new().fg(Color::DARK_GRAY));
+            .map(|p| std::path::Path::new(p).file_name().unwrap_or_default().to_string_lossy().to_string())
+            .unwrap_or_else(|| "No Sample".to_string());
+        Paragraph::new(Line::from(Span::styled(
+            filename,
+            ratatui::style::Style::from(Style::new().fg(Color::CYAN).bold()),
+        ))).render(RatatuiRect::new(content_x, content_y, rect.width.saturating_sub(4), 1), buf);
+
         let info = format!("{:.1}s   {} slices", chopper.duration_secs, chopper.slices.len());
-        g.put_str(rect.x + rect.width - 2 - info.len() as u16, content_y, &info);
+        let info_x = rect.x + rect.width - 2 - info.len() as u16;
+        Paragraph::new(Line::from(Span::styled(
+            info,
+            ratatui::style::Style::from(Style::new().fg(Color::DARK_GRAY)),
+        ))).render(RatatuiRect::new(info_x, content_y, rect.width.saturating_sub(info_x - rect.x), 1), buf);
 
         // Waveform
         let wave_y = content_y + 2;
-        let wave_height = 8;
+        let wave_height: u16 = 8;
         let wave_width = (rect.width - 4) as usize;
 
-        // Draw waveform peaks
-        // If we have peaks, map them to width
+        let green_style = ratatui::style::Style::from(Style::new().fg(Color::GREEN));
         if !chopper.waveform_peaks.is_empty() {
-            g.set_style(Style::new().fg(Color::GREEN));
-            // Simple resampling to fit wave_width
             let peaks = &chopper.waveform_peaks;
             for i in 0..wave_width {
-                // map i to index in peaks
                 let peak_idx = (i as f32 / wave_width as f32 * peaks.len() as f32) as usize;
                 if let Some(&val) = peaks.get(peak_idx) {
-                    // Draw vertical bar centered
                     let bar_h = (val * wave_height as f32) as u16;
                     let center_y = wave_y + wave_height / 2;
                     let top = center_y.saturating_sub(bar_h / 2);
                     let bottom = center_y.saturating_add(bar_h / 2);
                     for y in top..=bottom {
-                        g.put_char(content_x + i as u16, y, '│');
+                        if let Some(cell) = buf.cell_mut((content_x + i as u16, y)) {
+                            cell.set_char('│').set_style(green_style);
+                        }
                     }
                 }
             }
         } else {
-            g.put_str(content_x, wave_y + wave_height/2, "(No waveform data)");
+            Paragraph::new(Line::from(Span::styled(
+                "(No waveform data)",
+                ratatui::style::Style::from(Style::new().fg(Color::DARK_GRAY)),
+            ))).render(RatatuiRect::new(content_x, wave_y + wave_height / 2, 20, 1), buf);
         }
 
         // Draw slices
         let slice_y_start = wave_y;
         let slice_y_end = wave_y + wave_height;
-        
+        let dark_gray_style = ratatui::style::Style::from(Style::new().fg(Color::DARK_GRAY));
+        let sel_bg_style = ratatui::style::Style::from(Style::new().bg(Color::SELECTION_BG));
+        let sel_white_style = ratatui::style::Style::from(Style::new().fg(Color::WHITE).bg(Color::SELECTION_BG));
+
         for (i, slice) in chopper.slices.iter().enumerate() {
             let start_x = (slice.start * wave_width as f32) as u16;
             let end_x = (slice.end * wave_width as f32) as u16;
             let center_x = (start_x + end_x) / 2;
-            
+
             // Draw slice boundaries
-            g.set_style(Style::new().fg(Color::DARK_GRAY));
-            if i > 0 { // Don't draw over left edge
+            if i > 0 {
                 for y in slice_y_start..=slice_y_end {
-                    g.put_char(content_x + start_x, y, '|');
+                    if let Some(cell) = buf.cell_mut((content_x + start_x, y)) {
+                        cell.set_char('|').set_style(dark_gray_style);
+                    }
                 }
             }
 
             // Highlight selected slice
             if i == chopper.selected_slice {
-                g.set_style(Style::new().bg(Color::SELECTION_BG));
-                // Fill background of selected slice
                 for x in start_x..end_x {
-                    // avoid drawing over boundary
                     if x >= wave_width as u16 { break; }
-                    g.put_char(content_x + x, slice_y_end + 1, ' ');
+                    if let Some(cell) = buf.cell_mut((content_x + x, slice_y_end + 1)) {
+                        cell.set_char(' ').set_style(sel_bg_style);
+                    }
                 }
-                g.set_style(Style::new().fg(Color::WHITE).bg(Color::SELECTION_BG));
                 let label = format!("{}", i + 1);
-                g.put_str(content_x + center_x.saturating_sub(label.len() as u16 / 2), slice_y_end + 1, &label);
+                let lx = content_x + center_x.saturating_sub(label.len() as u16 / 2);
+                for (j, ch) in label.chars().enumerate() {
+                    if let Some(cell) = buf.cell_mut((lx + j as u16, slice_y_end + 1)) {
+                        cell.set_char(ch).set_style(sel_white_style);
+                    }
+                }
             } else {
-                g.set_style(Style::new().fg(Color::DARK_GRAY));
                 let label = format!("{}", i + 1);
                 if end_x - start_x > label.len() as u16 {
-                     g.put_str(content_x + center_x.saturating_sub(label.len() as u16 / 2), slice_y_end + 1, &label);
+                    let lx = content_x + center_x.saturating_sub(label.len() as u16 / 2);
+                    for (j, ch) in label.chars().enumerate() {
+                        if let Some(cell) = buf.cell_mut((lx + j as u16, slice_y_end + 1)) {
+                            cell.set_char(ch).set_style(dark_gray_style);
+                        }
+                    }
                 }
             }
         }
 
         // Draw cursor
         let cursor_screen_x = (self.cursor_pos * wave_width as f32) as u16;
-        g.set_style(Style::new().fg(Color::YELLOW));
+        let yellow_style = ratatui::style::Style::from(Style::new().fg(Color::YELLOW));
         for y in slice_y_start..=slice_y_end {
-            g.put_char(content_x + cursor_screen_x, y, '┆');
+            if let Some(cell) = buf.cell_mut((content_x + cursor_screen_x, y)) {
+                cell.set_char('┆').set_style(yellow_style);
+            }
         }
-        g.put_char(content_x + cursor_screen_x, slice_y_end + 2, '▲');
-
+        if let Some(cell) = buf.cell_mut((content_x + cursor_screen_x, slice_y_end + 2)) {
+            cell.set_char('▲').set_style(yellow_style);
+        }
 
         // List slices
         let list_y = slice_y_end + 4;
-        for i in 0..8 { // Show first 8 slices or scroll? Fixed 8 for now as per mockup
+        for i in 0..8 {
             if i >= chopper.slices.len() { break; }
             let slice = &chopper.slices[i];
             let y = list_y + i as u16;
-            
+
             if i == chopper.selected_slice {
-                g.set_style(Style::new().fg(Color::WHITE).bold());
-                g.put_str(content_x, y, ">");
-            } else {
-                g.set_style(Style::new().fg(Color::DARK_GRAY));
-                g.put_str(content_x, y, " ");
+                if let Some(cell) = buf.cell_mut((content_x, y)) {
+                    cell.set_char('>').set_style(
+                        ratatui::style::Style::from(Style::new().fg(Color::WHITE).bold()),
+                    );
+                }
             }
-            
-            g.set_style(Style::new().fg(if i == chopper.selected_slice { Color::WHITE } else { Color::GRAY }));
-            g.put_str(content_x + 2, y, &format!("{:<2} {:.3}-{:.3}", i + 1, slice.start, slice.end));
-            
-            // Check if assigned to any pad
-            // This requires access to DrumSequencerState which we have via AppState
-            // But we need to look up which pads use this buffer + slice range? 
-            // Or just trust the user assigned it.
-            // Let's check pads
+
+            let text = format!("{:<2} {:.3}-{:.3}", i + 1, slice.start, slice.end);
+            let style = ratatui::style::Style::from(Style::new().fg(
+                if i == chopper.selected_slice { Color::WHITE } else { Color::GRAY }
+            ));
+            for (j, ch) in text.chars().enumerate() {
+                if let Some(cell) = buf.cell_mut((content_x + 2 + j as u16, y)) {
+                    cell.set_char(ch).set_style(style);
+                }
+            }
+
+            // Check pad assignments
             if let Some(inst) = state.instruments.selected_instrument() {
                 if let Some(ds) = &inst.drum_sequencer {
                     for (pad_idx, pad) in ds.pads.iter().enumerate() {
-                        if pad.buffer_id == chopper.buffer_id && 
+                        if pad.buffer_id == chopper.buffer_id &&
                            (pad.slice_start - slice.start).abs() < 0.001 &&
                            (pad.slice_end - slice.end).abs() < 0.001 {
-                               g.put_str(content_x + 25, y, &format!("→ Pad {}", pad_idx + 1));
-                           }
+                            let pad_label = format!("→ Pad {}", pad_idx + 1);
+                            for (j, ch) in pad_label.chars().enumerate() {
+                                if let Some(cell) = buf.cell_mut((content_x + 25 + j as u16, y)) {
+                                    cell.set_char(ch).set_style(style);
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -260,8 +300,10 @@ impl Pane for SampleChopperPane {
 
         // Footer help
         let help_y = rect.y + rect.height - 2;
-        g.set_style(Style::new().fg(Color::DARK_GRAY));
-        g.put_str(content_x, help_y, "Enter:chop ,:commit x:del n:auto 1-0:assign Space:preview s:load Esc:back");
+        Paragraph::new(Line::from(Span::styled(
+            "Enter:chop ,:commit x:del n:auto 1-0:assign Space:preview s:load Esc:back",
+            ratatui::style::Style::from(Style::new().fg(Color::DARK_GRAY)),
+        ))).render(RatatuiRect::new(content_x, help_y, rect.width.saturating_sub(4), 1), buf);
     }
 
     fn keymap(&self) -> &Keymap {

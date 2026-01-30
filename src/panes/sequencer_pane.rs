@@ -1,8 +1,14 @@
 use std::any::Any;
 
+use ratatui::buffer::Buffer;
+use ratatui::layout::Rect as RatatuiRect;
+use ratatui::text::{Line, Span};
+use ratatui::widgets::{Block, Borders, Paragraph, Widget};
+
 use crate::state::drum_sequencer::NUM_PADS;
 use crate::state::AppState;
-use crate::ui::{Action, Color, Graphics, InputEvent, Keymap, NavAction, Pane, Rect, SequencerAction, Style};
+use crate::ui::layout_helpers::center_rect;
+use crate::ui::{Action, Color, InputEvent, Keymap, NavAction, Pane, SequencerAction, Style};
 
 pub struct SequencerPane {
     keymap: Keymap,
@@ -108,21 +114,24 @@ impl Pane for SequencerPane {
         }
     }
 
-    fn render(&self, g: &mut dyn Graphics, state: &AppState) {
-        let (width, height) = g.size();
+    fn render(&self, area: RatatuiRect, buf: &mut Buffer, state: &AppState) {
         let box_width: u16 = 97;
-        let box_height: u16 = 29;
-        let rect = Rect::centered(width, height, box_width, box_height);
+        let rect = center_rect(area, box_width, 29);
 
         let seq = match state.instruments.selected_drum_sequencer() {
             Some(s) => s,
             None => {
-                g.set_style(Style::new().fg(Color::ORANGE));
-                g.draw_box(rect, Some(" Drum Sequencer "));
-                let cx = rect.x + 2;
+                let block = Block::default()
+                    .borders(Borders::ALL)
+                    .title(" Drum Sequencer ")
+                    .border_style(ratatui::style::Style::from(Style::new().fg(Color::ORANGE)))
+                    .title_style(ratatui::style::Style::from(Style::new().fg(Color::ORANGE)));
+                block.render(rect, buf);
                 let cy = rect.y + rect.height / 2;
-                g.set_style(Style::new().fg(Color::DARK_GRAY));
-                g.put_str(cx + 10, cy, "No drum machine instrument selected. Press 1 to add one.");
+                Paragraph::new(Line::from(Span::styled(
+                    "No drum machine instrument selected. Press 1 to add one.",
+                    ratatui::style::Style::from(Style::new().fg(Color::DARK_GRAY)),
+                ))).render(RatatuiRect::new(rect.x + 12, cy, rect.width.saturating_sub(14), 1), buf);
                 return;
             }
         };
@@ -143,52 +152,61 @@ impl Pane for SequencerPane {
         let steps_shown = visible.min(pattern.length - view_start);
 
         // Draw box
-        g.set_style(Style::new().fg(Color::ORANGE));
-        g.draw_box(rect, Some(" Drum Sequencer "));
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .title(" Drum Sequencer ")
+            .border_style(ratatui::style::Style::from(Style::new().fg(Color::ORANGE)))
+            .title_style(ratatui::style::Style::from(Style::new().fg(Color::ORANGE)));
+        block.render(rect, buf);
 
         let cx = rect.x + 2;
         let cy = rect.y + 1;
 
-        // Header line: Pattern, Length, BPM, Play/Stop
+        // Header line
         let pattern_label = match seq.current_pattern {
-            0 => "A",
-            1 => "B",
-            2 => "C",
-            3 => "D",
-            _ => "?",
+            0 => "A", 1 => "B", 2 => "C", 3 => "D", _ => "?",
         };
         let play_label = if seq.playing { "PLAY" } else { "STOP" };
-        let play_color = if seq.playing {
-            Color::GREEN
-        } else {
-            Color::GRAY
-        };
+        let play_color = if seq.playing { Color::GREEN } else { Color::GRAY };
 
-        g.set_style(Style::new().fg(Color::WHITE).bold());
-        g.put_str(cx, cy, &format!("Pattern {}", pattern_label));
-
-        g.set_style(Style::new().fg(Color::DARK_GRAY));
-        g.put_str(cx + 12, cy, &format!("Length: {}", pattern.length));
-
-        let bpm = state.session.piano_roll.bpm;
-        g.put_str(cx + 24, cy, &format!("BPM: {:.0}", bpm));
-
-        g.set_style(Style::new().fg(play_color).bold());
-        g.put_str(cx + 36, cy, play_label);
+        let header = Line::from(vec![
+            Span::styled(
+                format!("Pattern {}", pattern_label),
+                ratatui::style::Style::from(Style::new().fg(Color::WHITE).bold()),
+            ),
+            Span::styled(
+                format!("  Length: {}", pattern.length),
+                ratatui::style::Style::from(Style::new().fg(Color::DARK_GRAY)),
+            ),
+            Span::styled(
+                format!("  BPM: {:.0}", state.session.piano_roll.bpm),
+                ratatui::style::Style::from(Style::new().fg(Color::DARK_GRAY)),
+            ),
+            Span::styled(
+                format!("  {}", play_label),
+                ratatui::style::Style::from(Style::new().fg(play_color).bold()),
+            ),
+        ]);
+        Paragraph::new(header).render(RatatuiRect::new(cx, cy, rect.width.saturating_sub(4), 1), buf);
 
         // Step number header
         let header_y = cy + 2;
-        let label_width: u16 = 11; // pad label column width
+        let label_width: u16 = 11;
         let step_col_start = cx + label_width;
 
-        g.set_style(Style::new().fg(Color::DARK_GRAY));
+        let dark_gray = ratatui::style::Style::from(Style::new().fg(Color::DARK_GRAY));
         for i in 0..steps_shown {
             let step_num = view_start + i + 1;
             let x = step_col_start + (i as u16) * 3;
-            if step_num < 10 {
-                g.put_str(x + 1, header_y, &format!("{}", step_num));
+            let num_str = if step_num < 10 {
+                format!(" {}", step_num)
             } else {
-                g.put_str(x, header_y, &format!("{:2}", step_num));
+                format!("{:2}", step_num)
+            };
+            for (j, ch) in num_str.chars().enumerate() {
+                if let Some(cell) = buf.cell_mut((x + j as u16, header_y)) {
+                    cell.set_char(ch).set_style(dark_gray);
+                }
             }
         }
 
@@ -204,20 +222,20 @@ impl Pane for SequencerPane {
             let label = if pad.name.is_empty() {
                 format!("{:>2} ----   ", pad_idx + 1)
             } else {
-                let name = if pad.name.len() > 6 {
-                    &pad.name[..6]
-                } else {
-                    &pad.name
-                };
+                let name = if pad.name.len() > 6 { &pad.name[..6] } else { &pad.name };
                 format!("{:>2} {:<6} ", pad_idx + 1, name)
             };
 
-            if is_cursor_row {
-                g.set_style(Style::new().fg(Color::WHITE).bold());
+            let label_style = if is_cursor_row {
+                ratatui::style::Style::from(Style::new().fg(Color::WHITE).bold())
             } else {
-                g.set_style(Style::new().fg(Color::GRAY));
+                ratatui::style::Style::from(Style::new().fg(Color::GRAY))
+            };
+            for (j, ch) in label.chars().enumerate() {
+                if let Some(cell) = buf.cell_mut((cx + j as u16, y)) {
+                    cell.set_char(ch).set_style(label_style);
+                }
             }
-            g.put_str(cx, y, &label);
 
             // Steps
             for i in 0..steps_shown {
@@ -229,21 +247,11 @@ impl Pane for SequencerPane {
                 let step = &pattern.steps[pad_idx][step_idx];
                 let is_beat = step_idx % 4 == 0;
 
-                // Determine cell style
                 let (fg, bg) = if is_cursor {
-                    if step.active {
-                        (Color::BLACK, Color::WHITE)
-                    } else {
-                        (Color::WHITE, Color::SELECTION_BG)
-                    }
+                    if step.active { (Color::BLACK, Color::WHITE) } else { (Color::WHITE, Color::SELECTION_BG) }
                 } else if is_playhead {
-                    if step.active {
-                        (Color::BLACK, Color::GREEN)
-                    } else {
-                        (Color::GREEN, Color::new(20, 50, 20))
-                    }
+                    if step.active { (Color::BLACK, Color::GREEN) } else { (Color::GREEN, Color::new(20, 50, 20)) }
                 } else if step.active {
-                    // Velocity-mapped color
                     let intensity = (step.velocity as f32 / 127.0 * 200.0) as u8 + 55;
                     (Color::new(intensity, intensity / 3, 0), Color::BLACK)
                 } else if is_beat {
@@ -252,85 +260,86 @@ impl Pane for SequencerPane {
                     (Color::new(40, 40, 40), Color::BLACK)
                 };
 
-                g.set_style(Style::new().fg(fg).bg(bg));
-                let ch = if step.active { " \u{2588} " } else { " \u{00B7} " };
-                g.put_str(x, y, ch);
+                let style = ratatui::style::Style::from(Style::new().fg(fg).bg(bg));
+                let chars: Vec<char> = if step.active { " █ " } else { " · " }.chars().collect();
+                for (j, ch) in chars.iter().enumerate() {
+                    if let Some(cell) = buf.cell_mut((x + j as u16, y)) {
+                        cell.set_char(*ch).set_style(style);
+                    }
+                }
             }
-
-            // Reset bg
-            g.set_style(Style::new().fg(Color::WHITE));
         }
 
         // Pad detail line
         let detail_y = grid_y + NUM_PADS as u16 + 1;
         let pad = &seq.pads[self.cursor_pad];
 
-        g.set_style(Style::new().fg(Color::ORANGE).bold());
-        g.put_str(cx, detail_y, &format!("Pad {:>2}", self.cursor_pad + 1));
+        let pad_label = format!("Pad {:>2}", self.cursor_pad + 1);
+        Paragraph::new(Line::from(Span::styled(
+            pad_label,
+            ratatui::style::Style::from(Style::new().fg(Color::ORANGE).bold()),
+        ))).render(RatatuiRect::new(cx, detail_y, 8, 1), buf);
 
-        g.set_style(Style::new().fg(Color::WHITE));
-        if pad.name.is_empty() {
-            g.put_str(cx + 8, detail_y, "(no sample)");
+        let name_display = if pad.name.is_empty() {
+            "(no sample)"
+        } else if pad.name.len() > 20 {
+            &pad.name[..20]
         } else {
-            let display_name = if pad.name.len() > 20 {
-                &pad.name[..20]
-            } else {
-                &pad.name
-            };
-            g.put_str(cx + 8, detail_y, display_name);
-        }
+            &pad.name
+        };
+        Paragraph::new(Line::from(Span::styled(
+            name_display,
+            ratatui::style::Style::from(Style::new().fg(Color::WHITE)),
+        ))).render(RatatuiRect::new(cx + 8, detail_y, 22, 1), buf);
 
         // Level bar
         let level_x = cx + 32;
-        g.set_style(Style::new().fg(Color::DARK_GRAY));
-        g.put_str(level_x, detail_y, "Level:");
-
-        let bar_x = level_x + 7;
-        let bar_width = 10;
-        let filled = (pad.level * bar_width as f32) as usize;
-        for i in 0..bar_width {
-            if i < filled {
-                g.set_style(Style::new().fg(Color::ORANGE));
-                g.put_char(bar_x + i as u16, detail_y, '\u{2588}');
-            } else {
-                g.set_style(Style::new().fg(Color::new(40, 40, 40)));
-                g.put_char(bar_x + i as u16, detail_y, '\u{2591}');
+        for (j, ch) in "Level:".chars().enumerate() {
+            if let Some(cell) = buf.cell_mut((level_x + j as u16, detail_y)) {
+                cell.set_char(ch).set_style(dark_gray);
             }
         }
 
-        // Velocity of current step
+        let bar_x = level_x + 7;
+        let bar_width: usize = 10;
+        let filled = (pad.level * bar_width as f32) as usize;
+        for i in 0..bar_width {
+            let (ch, style) = if i < filled {
+                ('\u{2588}', ratatui::style::Style::from(Style::new().fg(Color::ORANGE)))
+            } else {
+                ('\u{2591}', ratatui::style::Style::from(Style::new().fg(Color::new(40, 40, 40))))
+            };
+            if let Some(cell) = buf.cell_mut((bar_x + i as u16, detail_y)) {
+                cell.set_char(ch).set_style(style);
+            }
+        }
+
+        // Velocity
         let step = &pattern.steps[self.cursor_pad][self.cursor_step];
-        g.set_style(Style::new().fg(Color::DARK_GRAY));
-        g.put_str(
-            bar_x + bar_width as u16 + 2,
-            detail_y,
-            &format!("Vel: {}", step.velocity),
-        );
+        let vel_str = format!("Vel: {}", step.velocity);
+        for (j, ch) in vel_str.chars().enumerate() {
+            if let Some(cell) = buf.cell_mut((bar_x + bar_width as u16 + 2 + j as u16, detail_y)) {
+                cell.set_char(ch).set_style(dark_gray);
+            }
+        }
 
         // Scroll indicator
         if pattern.length > visible {
-            let scroll_x = rect.x + rect.width - 12;
-            g.set_style(Style::new().fg(Color::DARK_GRAY));
-            g.put_str(
-                scroll_x,
-                detail_y,
-                &format!(
-                    "{}-{}/{}",
-                    view_start + 1,
-                    view_start + steps_shown,
-                    pattern.length
-                ),
-            );
+            let scroll_str = format!("{}-{}/{}", view_start + 1, view_start + steps_shown, pattern.length);
+            let scroll_x = rect.x + rect.width - 2 - scroll_str.len() as u16;
+            for (j, ch) in scroll_str.chars().enumerate() {
+                if let Some(cell) = buf.cell_mut((scroll_x + j as u16, detail_y)) {
+                    cell.set_char(ch).set_style(dark_gray);
+                }
+            }
         }
 
         // Help line
         let help_y = rect.y + rect.height - 2;
-        g.set_style(Style::new().fg(Color::DARK_GRAY));
-        g.put_str(
-            cx,
-            help_y,
+        Paragraph::new(Line::from(Span::styled(
             "Enter:toggle  Space:play/stop  s:sample  c:chopper  x:clear  []:pattern  {:length",
-        );
+            ratatui::style::Style::from(Style::new().fg(Color::DARK_GRAY)),
+        ))).render(RatatuiRect::new(cx, help_y, rect.width.saturating_sub(4), 1), buf);
     }
 
     fn keymap(&self) -> &Keymap {

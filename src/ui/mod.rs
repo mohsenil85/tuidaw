@@ -1,8 +1,8 @@
 pub mod frame;
-pub mod graphics;
 pub mod input;
 pub mod keybindings;
 pub mod keymap;
+pub mod layout_helpers;
 pub mod pad_keyboard;
 pub mod pane;
 pub mod piano_keyboard;
@@ -11,7 +11,6 @@ pub mod style;
 pub mod widgets;
 
 pub use frame::{Frame, ViewState};
-pub use graphics::{Graphics, Rect};
 pub use input::{InputEvent, InputSource, KeyCode, Modifiers};
 pub use keymap::Keymap;
 pub use pad_keyboard::PadKeyboard;

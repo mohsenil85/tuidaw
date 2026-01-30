@@ -2,9 +2,15 @@ use std::any::Any;
 use std::fs;
 use std::path::PathBuf;
 
+use ratatui::buffer::Buffer;
+use ratatui::layout::Rect as RatatuiRect;
+use ratatui::text::{Line, Span};
+use ratatui::widgets::{Block, Borders, Paragraph, Widget};
+
 use crate::state::AppState;
+use crate::ui::layout_helpers::center_rect;
 use crate::ui::{
-    Action, ChopperAction, Color, FileSelectAction, Graphics, InputEvent, Keymap, NavAction, Pane, Rect,
+    Action, ChopperAction, Color, FileSelectAction, InputEvent, Keymap, NavAction, Pane,
     SequencerAction, SessionAction, Style,
 };
 
@@ -198,43 +204,45 @@ impl Pane for FileBrowserPane {
         }
     }
 
-    fn render(&self, g: &mut dyn Graphics, _state: &AppState) {
-        let (width, height) = g.size();
-        let box_width = 97;
-        let box_height = 29;
-        let rect = Rect::centered(width, height, box_width, box_height);
+    fn render(&self, area: RatatuiRect, buf: &mut Buffer, _state: &AppState) {
+        let rect = center_rect(area, 97, 29);
 
         let title = match self.on_select_action {
             FileSelectAction::ImportCustomSynthDef => " Import Custom SynthDef ",
             FileSelectAction::LoadDrumSample(_) | FileSelectAction::LoadChopperSample => " Load Sample ",
         };
-        g.set_style(Style::new().fg(Color::PURPLE));
-        g.draw_box(rect, Some(title));
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .title(title)
+            .border_style(ratatui::style::Style::from(Style::new().fg(Color::PURPLE)))
+            .title_style(ratatui::style::Style::from(Style::new().fg(Color::PURPLE)));
+        let inner = block.inner(rect);
+        block.render(rect, buf);
 
-        let content_x = rect.x + 2;
-        let content_y = rect.y + 2;
+        let content_x = inner.x + 1;
+        let content_y = inner.y + 1;
 
         // Current path
-        g.set_style(Style::new().fg(Color::CYAN).bold());
         let path_str = self.current_dir.to_string_lossy();
-        let max_path_width = (rect.width - 4) as usize;
+        let max_path_width = inner.width.saturating_sub(2) as usize;
         let display_path = if path_str.len() > max_path_width {
             format!("...{}", &path_str[path_str.len() - max_path_width + 3..])
         } else {
             path_str.to_string()
         };
-        g.put_str(content_x, content_y, &display_path);
+        Paragraph::new(Line::from(Span::styled(
+            display_path,
+            ratatui::style::Style::from(Style::new().fg(Color::CYAN).bold()),
+        ))).render(RatatuiRect::new(content_x, content_y, inner.width.saturating_sub(2), 1), buf);
 
         // File list
         let list_y = content_y + 2;
-        let visible_height = (rect.height - 7) as usize; // Account for padding and help
+        let visible_height = inner.height.saturating_sub(6) as usize;
 
-        // Clone to avoid borrow issues
         let entries = &self.entries;
         let selected = self.selected;
         let scroll_offset = self.scroll_offset;
 
-        // Calculate scroll offset for visibility
         let mut eff_scroll = scroll_offset;
         if selected < eff_scroll {
             eff_scroll = selected;
@@ -242,101 +250,95 @@ impl Pane for FileBrowserPane {
             eff_scroll = selected - visible_height + 1;
         }
 
+        let sel_bg = ratatui::style::Style::from(Style::new().bg(Color::SELECTION_BG));
+
         if entries.is_empty() {
-            g.set_style(Style::new().fg(Color::DARK_GRAY));
             let ext_label = self
                 .filter_extensions
                 .as_ref()
                 .map(|exts| exts.join("/"))
                 .unwrap_or_default();
-            g.put_str(
-                content_x,
-                list_y,
-                &format!("(no .{} files found)", ext_label),
-            );
+            Paragraph::new(Line::from(Span::styled(
+                format!("(no .{} files found)", ext_label),
+                ratatui::style::Style::from(Style::new().fg(Color::DARK_GRAY)),
+            ))).render(RatatuiRect::new(content_x, list_y, inner.width.saturating_sub(2), 1), buf);
         } else {
-            for (i, entry) in entries
-                .iter()
-                .skip(eff_scroll)
-                .take(visible_height)
-                .enumerate()
-            {
+            for (i, entry) in entries.iter().skip(eff_scroll).take(visible_height).enumerate() {
                 let y = list_y + i as u16;
+                if y >= inner.y + inner.height {
+                    break;
+                }
                 let is_selected = eff_scroll + i == selected;
 
+                // Fill selection background
                 if is_selected {
-                    g.set_style(
-                        Style::new()
-                            .fg(Color::WHITE)
-                            .bg(Color::SELECTION_BG)
-                            .bold(),
-                    );
-                    // Fill selection background
-                    for x in content_x..(rect.x + rect.width - 2) {
-                        g.put_char(x, y, ' ');
+                    for x in content_x..(inner.x + inner.width) {
+                        if let Some(cell) = buf.cell_mut((x, y)) {
+                            cell.set_char(' ').set_style(sel_bg);
+                        }
                     }
-                    g.put_str(content_x, y, ">");
-                } else {
-                    g.set_style(Style::new().fg(Color::DARK_GRAY));
-                    g.put_str(content_x, y, " ");
+                    if let Some(cell) = buf.cell_mut((content_x, y)) {
+                        cell.set_char('>').set_style(
+                            ratatui::style::Style::from(Style::new().fg(Color::WHITE).bg(Color::SELECTION_BG).bold()),
+                        );
+                    }
                 }
 
-                // Icon and name
-                let (icon, color) = if entry.is_dir {
+                let (icon, icon_color) = if entry.is_dir {
                     ("/", Color::CYAN)
                 } else {
                     (" ", Color::CUSTOM_COLOR)
                 };
 
-                if is_selected {
-                    g.set_style(Style::new().fg(color).bg(Color::SELECTION_BG));
+                let icon_style = if is_selected {
+                    ratatui::style::Style::from(Style::new().fg(icon_color).bg(Color::SELECTION_BG))
                 } else {
-                    g.set_style(Style::new().fg(color));
-                }
-                g.put_str(content_x + 2, y, icon);
+                    ratatui::style::Style::from(Style::new().fg(icon_color))
+                };
 
-                let max_name_width = (rect.width - 8) as usize;
+                let max_name_width = inner.width.saturating_sub(6) as usize;
                 let display_name = if entry.name.len() > max_name_width {
                     format!("{}...", &entry.name[..max_name_width - 3])
                 } else {
                     entry.name.clone()
                 };
 
-                if is_selected {
-                    g.set_style(Style::new().fg(Color::WHITE).bg(Color::SELECTION_BG));
+                let name_color = if entry.is_dir { Color::CYAN } else { Color::WHITE };
+                let name_style = if is_selected {
+                    ratatui::style::Style::from(Style::new().fg(Color::WHITE).bg(Color::SELECTION_BG))
                 } else {
-                    g.set_style(Style::new().fg(if entry.is_dir {
-                        Color::CYAN
-                    } else {
-                        Color::WHITE
-                    }));
-                }
-                g.put_str(content_x + 4, y, &display_name);
+                    ratatui::style::Style::from(Style::new().fg(name_color))
+                };
+
+                let line = Line::from(vec![
+                    Span::styled(icon, icon_style),
+                    Span::styled(format!(" {}", display_name), name_style),
+                ]);
+                Paragraph::new(line).render(
+                    RatatuiRect::new(content_x + 2, y, inner.width.saturating_sub(4), 1), buf,
+                );
             }
 
             // Scroll indicators
+            let scroll_style = ratatui::style::Style::from(Style::new().fg(Color::DARK_GRAY));
             if eff_scroll > 0 {
-                g.set_style(Style::new().fg(Color::DARK_GRAY));
-                g.put_str(rect.x + rect.width - 4, list_y, "...");
+                Paragraph::new(Line::from(Span::styled("...", scroll_style)))
+                    .render(RatatuiRect::new(rect.x + rect.width - 5, list_y, 3, 1), buf);
             }
             if eff_scroll + visible_height < entries.len() {
-                g.set_style(Style::new().fg(Color::DARK_GRAY));
-                g.put_str(
-                    rect.x + rect.width - 4,
-                    list_y + visible_height as u16 - 1,
-                    "...",
-                );
+                Paragraph::new(Line::from(Span::styled("...", scroll_style)))
+                    .render(RatatuiRect::new(rect.x + rect.width - 5, list_y + visible_height as u16 - 1, 3, 1), buf);
             }
         }
 
         // Help text
         let help_y = rect.y + rect.height - 2;
-        g.set_style(Style::new().fg(Color::DARK_GRAY));
-        g.put_str(
-            content_x,
-            help_y,
-            "Enter: select | Backspace: parent | ~: home | Esc: cancel",
-        );
+        if help_y < area.y + area.height {
+            Paragraph::new(Line::from(Span::styled(
+                "Enter: select | Backspace: parent | ~: home | Esc: cancel",
+                ratatui::style::Style::from(Style::new().fg(Color::DARK_GRAY)),
+            ))).render(RatatuiRect::new(content_x, help_y, inner.width.saturating_sub(2), 1), buf);
+        }
     }
 
     fn keymap(&self) -> &Keymap {

@@ -1,4 +1,6 @@
-use crate::ui::{Color, Graphics, InputEvent, KeyCode, Style};
+use ratatui::buffer::Buffer;
+
+use crate::ui::{Color, InputEvent, KeyCode, Style};
 
 /// A single-line text input widget
 pub struct TextInput {
@@ -105,45 +107,59 @@ impl TextInput {
         }
     }
 
-    /// Render the text input at the given position
-    /// Returns the height used (always 1 for single-line input)
-    pub fn render(&self, g: &mut dyn Graphics, x: u16, y: u16, width: u16) -> u16 {
+    /// Render the text input into a ratatui buffer at the given position
+    pub fn render_buf(&self, buf: &mut Buffer, x: u16, y: u16, width: u16) -> u16 {
         // Draw label
-        g.set_style(Style::new().fg(Color::WHITE));
-        g.put_str(x, y, &self.label);
+        let label_style = ratatui::style::Style::from(Style::new().fg(Color::WHITE));
+        for (j, ch) in self.label.chars().enumerate() {
+            if let Some(cell) = buf.cell_mut((x + j as u16, y)) {
+                cell.set_char(ch).set_style(label_style);
+            }
+        }
 
         let input_x = x + self.label.len() as u16 + 1;
         let input_width = width.saturating_sub(self.label.len() as u16 + 1);
 
-        // Draw input background/border
+        // Draw input brackets
         let border_style = if self.focused {
-            Style::new().fg(Color::BLUE)
+            ratatui::style::Style::from(Style::new().fg(Color::BLUE))
         } else {
-            Style::new().fg(Color::GRAY)
+            ratatui::style::Style::from(Style::new().fg(Color::GRAY))
         };
-        g.set_style(border_style);
-        g.put_char(input_x, y, '[');
-        g.put_char(input_x + input_width - 1, y, ']');
+        if let Some(cell) = buf.cell_mut((input_x, y)) {
+            cell.set_char('[').set_style(border_style);
+        }
+        if let Some(cell) = buf.cell_mut((input_x + input_width - 1, y)) {
+            cell.set_char(']').set_style(border_style);
+        }
 
         // Draw content or placeholder
         let content_x = input_x + 1;
         let content_width = input_width.saturating_sub(2) as usize;
 
         if self.value.is_empty() && !self.focused {
-            g.set_style(Style::new().fg(Color::GRAY));
-            let placeholder: String = self.placeholder.chars().take(content_width).collect();
-            g.put_str(content_x, y, &placeholder);
+            let ph_style = ratatui::style::Style::from(Style::new().fg(Color::GRAY));
+            for (j, ch) in self.placeholder.chars().take(content_width).enumerate() {
+                if let Some(cell) = buf.cell_mut((content_x + j as u16, y)) {
+                    cell.set_char(ch).set_style(ph_style);
+                }
+            }
         } else {
-            g.set_style(Style::new().fg(Color::WHITE));
-            let display: String = self.value.chars().take(content_width).collect();
-            g.put_str(content_x, y, &display);
+            let val_style = ratatui::style::Style::from(Style::new().fg(Color::WHITE));
+            for (j, ch) in self.value.chars().take(content_width).enumerate() {
+                if let Some(cell) = buf.cell_mut((content_x + j as u16, y)) {
+                    cell.set_char(ch).set_style(val_style);
+                }
+            }
 
             // Draw cursor if focused
             if self.focused {
                 let cursor_x = content_x + self.cursor.min(content_width) as u16;
-                g.set_style(Style::new().fg(Color::WHITE).bg(Color::SELECTION_BG));
+                let cursor_style = ratatui::style::Style::from(Style::new().fg(Color::WHITE).bg(Color::SELECTION_BG));
                 let cursor_char = self.value.chars().nth(self.cursor).unwrap_or(' ');
-                g.put_char(cursor_x, y, cursor_char);
+                if let Some(cell) = buf.cell_mut((cursor_x, y)) {
+                    cell.set_char(cursor_char).set_style(cursor_style);
+                }
             }
         }
 

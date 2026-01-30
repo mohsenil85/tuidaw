@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use crate::ui::{Color, Graphics, InputEvent, KeyCode, Style};
+use crate::ui::{InputEvent, KeyCode};
 
 /// An item in a select list
 #[derive(Clone)]
@@ -101,65 +101,4 @@ impl SelectList {
         }
     }
 
-    /// Render the select list at the given position
-    /// Returns the height used
-    pub fn render(&self, g: &mut dyn Graphics, x: u16, y: u16, width: u16, max_height: u16) -> u16 {
-        let mut current_y = y;
-
-        // Draw title
-        let title_style = if self.focused {
-            Style::new().fg(Color::BLUE)
-        } else {
-            Style::new().fg(Color::BLACK)
-        };
-        g.set_style(title_style);
-        g.put_str(x, current_y, &self.title);
-        current_y += 1;
-
-        // Draw items
-        let visible_items = (max_height - 1) as usize;
-        let start_idx = if self.selected >= visible_items {
-            self.selected - visible_items + 1
-        } else {
-            0
-        };
-
-        for (i, item) in self.items.iter().enumerate().skip(start_idx) {
-            if current_y >= y + max_height {
-                break;
-            }
-
-            let is_selected = i == self.selected;
-
-            // Selection indicator and styling
-            if is_selected && self.focused {
-                g.set_style(Style::new().fg(Color::WHITE).bg(Color::BLUE));
-                g.put_str(x, current_y, "> ");
-            } else if is_selected {
-                g.set_style(Style::new().fg(Color::BLACK));
-                g.put_str(x, current_y, "> ");
-            } else {
-                g.set_style(Style::new().fg(Color::BLACK));
-                g.put_str(x, current_y, "  ");
-            }
-
-            // Item label
-            let label_width = (width - 2) as usize;
-            let label: String = item.label.chars().take(label_width).collect();
-            g.put_str(x + 2, current_y, &label);
-
-            // Reset style after selected item
-            if is_selected && self.focused {
-                // Fill rest of line with selection background
-                let remaining = label_width.saturating_sub(label.len());
-                for i in 0..remaining {
-                    g.put_char(x + 2 + label.len() as u16 + i as u16, current_y, ' ');
-                }
-            }
-
-            current_y += 1;
-        }
-
-        current_y - y
-    }
 }

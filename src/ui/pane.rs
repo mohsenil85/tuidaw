@@ -1,7 +1,10 @@
 use std::any::Any;
 use std::path::PathBuf;
 
-use super::{Graphics, InputEvent, Keymap};
+use ratatui::buffer::Buffer;
+use ratatui::layout::Rect as RatatuiRect;
+
+use super::{InputEvent, Keymap};
 use crate::state::{AppState, EffectType, FilterType, InstrumentId, MusicalSettings, SourceType};
 
 /// Drum sequencer actions
@@ -166,8 +169,8 @@ pub trait Pane {
     /// Handle an input event, returning an action
     fn handle_input(&mut self, event: InputEvent, state: &AppState) -> Action;
 
-    /// Render the pane to the graphics context
-    fn render(&self, g: &mut dyn Graphics, state: &AppState);
+    /// Render the pane to the buffer
+    fn render(&self, area: RatatuiRect, buf: &mut Buffer, state: &AppState);
 
     /// Get the keymap for this pane (for introspection/help)
     fn keymap(&self) -> &Keymap;
@@ -279,9 +282,9 @@ impl PaneManager {
         action
     }
 
-    /// Render the active pane
-    pub fn render(&self, g: &mut dyn Graphics, state: &AppState) {
-        self.active().render(g, state);
+    /// Render the active pane to the buffer.
+    pub fn render(&self, area: RatatuiRect, buf: &mut Buffer, state: &AppState) {
+        self.active().render(area, buf, state);
     }
 
     /// Get the keymap of the active pane

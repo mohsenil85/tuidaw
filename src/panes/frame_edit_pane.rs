@@ -1,8 +1,14 @@
 use std::any::Any;
 
+use ratatui::buffer::Buffer;
+use ratatui::layout::Rect as RatatuiRect;
+use ratatui::text::{Line, Span};
+use ratatui::widgets::{Block, Borders, Paragraph, Widget};
+
 use crate::state::music::{Key, Scale};
 use crate::state::{AppState, MusicalSettings};
-use crate::ui::{Action, Color, Graphics, InputEvent, KeyCode, Keymap, NavAction, Pane, Rect, SessionAction, Style};
+use crate::ui::layout_helpers::center_rect;
+use crate::ui::{Action, Color, InputEvent, KeyCode, Keymap, NavAction, Pane, SessionAction, Style};
 use crate::ui::widgets::TextInput;
 
 /// Fields editable in the frame editor
@@ -211,71 +217,86 @@ impl Pane for FrameEditPane {
         }
     }
 
-    fn render(&self, g: &mut dyn Graphics, _state: &AppState) {
-        let (width, height) = g.size();
-        let box_width = 50;
-        let box_height = 13;
-        let rect = Rect::centered(width, height, box_width, box_height);
+    fn render(&self, area: RatatuiRect, buf: &mut Buffer, _state: &AppState) {
+        let rect = center_rect(area, 50, 13);
 
-        g.set_style(Style::new().fg(Color::CYAN));
-        g.draw_box(rect, Some(" Session "));
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .title(" Session ")
+            .border_style(ratatui::style::Style::from(Style::new().fg(Color::CYAN)))
+            .title_style(ratatui::style::Style::from(Style::new().fg(Color::CYAN)));
+        let inner = block.inner(rect);
+        block.render(rect, buf);
 
-        let content_x = rect.x + 3;
-        let list_y = rect.y + 2;
+        let label_col = inner.x + 2;
+        let value_col = label_col + 15;
 
         for (i, field) in FIELDS.iter().enumerate() {
-            let y = list_y + i as u16;
+            let y = inner.y + 1 + i as u16;
+            if y >= inner.y + inner.height {
+                break;
+            }
             let is_selected = i == self.selected;
+            let sel_bg = ratatui::style::Style::from(Style::new().bg(Color::SELECTION_BG));
 
             // Indicator
             if is_selected {
-                g.set_style(Style::new().fg(Color::WHITE).bg(Color::SELECTION_BG).bold());
-                g.put_str(content_x - 1, y, ">");
+                let ind_style = ratatui::style::Style::from(Style::new().fg(Color::WHITE).bg(Color::SELECTION_BG).bold());
+                if let Some(cell) = buf.cell_mut((label_col, y)) {
+                    cell.set_char('>').set_style(ind_style);
+                }
             }
 
             // Label
             let label_style = if is_selected {
-                Style::new().fg(Color::CYAN).bg(Color::SELECTION_BG)
+                ratatui::style::Style::from(Style::new().fg(Color::CYAN).bg(Color::SELECTION_BG))
             } else {
-                Style::new().fg(Color::CYAN)
+                ratatui::style::Style::from(Style::new().fg(Color::CYAN))
             };
-            g.set_style(label_style);
-            g.put_str(content_x + 1, y, &format!("{:14}", Self::field_label(*field)));
+            let label = format!("{:14}", Self::field_label(*field));
+            Paragraph::new(Line::from(Span::styled(label, label_style)))
+                .render(RatatuiRect::new(label_col + 2, y, 14, 1), buf);
 
-            // Value (or text input)
+            // Value
             if is_selected && self.editing {
-                self.edit_input.render(g, content_x + 16, y, 16);
+                // Render TextInput inline
+                self.edit_input.render_buf(buf, value_col, y, inner.width.saturating_sub(18));
             } else {
                 let val_style = if is_selected {
-                    Style::new().fg(Color::WHITE).bg(Color::SELECTION_BG)
+                    ratatui::style::Style::from(Style::new().fg(Color::WHITE).bg(Color::SELECTION_BG))
                 } else {
-                    Style::new().fg(Color::WHITE)
+                    ratatui::style::Style::from(Style::new().fg(Color::WHITE))
                 };
-                g.set_style(val_style);
                 let val = self.field_value(*field);
-                g.put_str(content_x + 16, y, &val);
-            }
+                Paragraph::new(Line::from(Span::styled(&val, val_style)))
+                    .render(RatatuiRect::new(value_col, y, inner.width.saturating_sub(18), 1), buf);
 
-            // Clear rest of line if selected
-            if is_selected {
-                let val_len = if self.editing { 16 } else { self.field_value(*field).len() };
-                let line_end = content_x + 16 + val_len as u16;
-                g.set_style(Style::new().bg(Color::SELECTION_BG));
-                for x in line_end..(rect.x + rect.width - 2) {
-                    g.put_char(x, y, ' ');
+                // Fill rest of line with selection bg
+                if is_selected {
+                    let fill_start = value_col + val.len() as u16;
+                    let fill_end = inner.x + inner.width;
+                    for x in fill_start..fill_end {
+                        if let Some(cell) = buf.cell_mut((x, y)) {
+                            cell.set_char(' ').set_style(sel_bg);
+                        }
+                    }
                 }
             }
         }
 
         // Help
         let help_y = rect.y + rect.height - 2;
-        g.set_style(Style::new().fg(Color::DARK_GRAY));
-        let help = if self.editing {
-            "Enter: confirm | Esc: cancel"
-        } else {
-            "Left/Right: adjust | Enter: type/confirm | Esc: cancel"
-        };
-        g.put_str(content_x, help_y, help);
+        if help_y < area.y + area.height {
+            let help = if self.editing {
+                "Enter: confirm | Esc: cancel"
+            } else {
+                "Left/Right: adjust | Enter: type/confirm | Esc: cancel"
+            };
+            Paragraph::new(Line::from(Span::styled(
+                help,
+                ratatui::style::Style::from(Style::new().fg(Color::DARK_GRAY)),
+            ))).render(RatatuiRect::new(inner.x + 2, help_y, inner.width.saturating_sub(2), 1), buf);
+        }
     }
 
     fn keymap(&self) -> &Keymap {

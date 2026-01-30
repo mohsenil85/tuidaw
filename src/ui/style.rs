@@ -1,3 +1,5 @@
+use ratatui::style::{Color as RatatuiColor, Modifier, Style as RatatuiStyle};
+
 /// RGB color. Construct with `Color::new(r, g, b)` or use named constants
 /// (e.g. `Color::WHITE`, `Color::PINK`, `Color::MIDI_COLOR`, `Color::METER_LOW`).
 ///
@@ -130,5 +132,32 @@ impl Style {
     pub const fn underline(mut self) -> Self {
         self.underline = true;
         self
+    }
+}
+
+// --- Conversions to ratatui types ---
+
+impl From<Color> for RatatuiColor {
+    fn from(c: Color) -> Self {
+        RatatuiColor::Rgb(c.r, c.g, c.b)
+    }
+}
+
+impl From<Style> for RatatuiStyle {
+    fn from(s: Style) -> Self {
+        let mut rs = RatatuiStyle::default();
+        if let Some(fg) = s.fg {
+            rs = rs.fg(RatatuiColor::from(fg));
+        }
+        if let Some(bg) = s.bg {
+            rs = rs.bg(RatatuiColor::from(bg));
+        }
+        if s.bold {
+            rs = rs.add_modifier(Modifier::BOLD);
+        }
+        if s.underline {
+            rs = rs.add_modifier(Modifier::UNDERLINED);
+        }
+        rs
     }
 }
