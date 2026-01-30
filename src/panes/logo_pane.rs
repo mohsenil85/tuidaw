@@ -18,7 +18,7 @@ impl LogoPane {
     pub fn new(keymap: Keymap) -> Self {
         Self {
             keymap,
-            logo_content: include_str!("../../logo2.txt"),
+            logo_content: include_str!("../../logo.txt"),
         }
     }
 }
@@ -51,9 +51,9 @@ impl Pane for LogoPane {
 
         let centered_rect = center_rect(inner, width, height);
 
-        let color1 = Color::DEEP_GREEN;
-        let color2 = Color::GOLD;
-        let color3 = Color::RED;
+        let color1 = Color::CYAN;
+        let color2 = Color::PURPLE;
+        let color3 = Color::MAGENTA;
 
         let text: Vec<Line> = lines.iter().enumerate()
             .map(|(y, l)| {
