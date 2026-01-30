@@ -683,10 +683,10 @@ fn save_automation(conn: &SqlConnection, session: &SessionState) -> SqlResult<()
                 ("effect_param", *id, Some(*fx as i32), Some(*param as i32))
             }
             super::automation::AutomationTarget::SampleRate(id) => {
-                ("sample_rate", *id, None, None)
+                ("sampler_rate", *id, None, None)
             }
-            super::automation::AutomationTarget::SampleAmp(id) => {
-                ("sample_amp", *id, None, None)
+            super::automation::AutomationTarget::SamplerAmp(id) => {
+                ("sampler_amp", *id, None, None)
             }
         };
 
@@ -938,7 +938,7 @@ fn load_instruments(conn: &SqlConnection) -> SqlResult<Vec<Instrument>> {
         } else {
             None
         };
-        // Kit instruments get a drum sequencer (loaded separately below)
+        // DrumMachine instruments get a drum sequencer (loaded separately below)
         let drum_sequencer = if source.is_kit() {
             Some(super::drum_sequencer::DrumSequencerState::new())
         } else {
@@ -1426,8 +1426,8 @@ fn load_automation(conn: &SqlConnection) -> SqlResult<super::automation::Automat
                             let param = param_idx.unwrap_or(0) as usize;
                             AutomationTarget::EffectParam(inst_id, fx, param)
                         }
-                        "sample_rate" | "sampler_rate" => AutomationTarget::SampleRate(inst_id),
-                        "sample_amp" | "sampler_amp" => AutomationTarget::SampleAmp(inst_id),
+                        "sampler_rate" => AutomationTarget::SampleRate(inst_id),
+                        "sampler_amp" => AutomationTarget::SamplerAmp(inst_id),
                         _ => continue,
                     };
 
@@ -1680,8 +1680,8 @@ fn parse_osc_type(s: &str) -> OscType {
         "sqr" => OscType::Sqr,
         "tri" => OscType::Tri,
         "audio_in" => OscType::AudioIn,
-        "sample" | "sampler" => OscType::Sample,
-        "kit" | "drum" => OscType::Kit,
+        "sampler" => OscType::Sample,
+        "drum" => OscType::Kit,
         other if other.starts_with("custom:") => {
             if let Ok(id) = other[7..].parse::<u32>() {
                 OscType::Custom(id)

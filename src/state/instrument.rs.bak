@@ -25,8 +25,8 @@ impl OscType {
             OscType::Sqr => "Square",
             OscType::Tri => "Triangle",
             OscType::AudioIn => "Audio In",
-            OscType::Sample => "Sample",
-            OscType::Kit => "Kit",
+            OscType::Sample => "Sampler",
+            OscType::Kit => "Drum Machine",
             OscType::Custom(_) => "Custom",
         }
     }
@@ -49,8 +49,8 @@ impl OscType {
             OscType::Sqr => "sqr",
             OscType::Tri => "tri",
             OscType::AudioIn => "audio_in",
-            OscType::Sample => "sample",
-            OscType::Kit => "kit",
+            OscType::Sample => "sampler",
+            OscType::Kit => "drum",
             OscType::Custom(_) => "custom",
         }
     }
@@ -188,7 +188,7 @@ impl OscType {
         matches!(self, OscType::Sample)
     }
 
-    pub fn is_kit(&self) -> bool {
+    pub fn is_drum_machine(&self) -> bool {
         matches!(self, OscType::Kit)
     }
 
@@ -598,25 +598,25 @@ pub struct Instrument {
     pub solo: bool,
     pub output_target: OutputTarget,
     pub sends: Vec<MixerSend>,
-    // Sample configuration (only used when source is OscType::Sample)
+    // Sampler configuration (only used when source is OscType::Sampler)
     pub sampler_config: Option<SamplerConfig>,
-    // Kit sequencer (only used when source is OscType::Kit)
+    // Drum sequencer (only used when source is OscType::DrumMachine)
     pub drum_sequencer: Option<DrumSequencerState>,
 }
 
 impl Instrument {
     pub fn new(id: InstrumentId, source: OscType) -> Self {
         let sends = (1..=MAX_BUSES as u8).map(MixerSend::new).collect();
-        // Audio input and kit instruments don't have piano roll tracks
-        let has_track = !source.is_audio_input() && !source.is_kit();
-        // Sample instruments get a sampler config
+        // Audio input and drum machine instruments don't have piano roll tracks
+        let has_track = !source.is_audio_input() && !source.is_drum_machine();
+        // Sampler instruments get a sampler config
         let sampler_config = if source.is_sample() {
             Some(SamplerConfig::default())
         } else {
             None
         };
-        // Kit instruments get a drum sequencer
-        let drum_sequencer = if source.is_kit() {
+        // Drum machine instruments get a drum sequencer
+        let drum_sequencer = if source.is_drum_machine() {
             Some(DrumSequencerState::new())
         } else {
             None

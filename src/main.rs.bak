@@ -202,7 +202,7 @@ fn handle_global_action(
         }
         "switch:piano_roll_or_sequencer" => {
             let target = if state.instruments.selected_instrument()
-                .map_or(false, |s| s.source.is_kit())
+                .map_or(false, |s| s.source.is_drum_machine())
             {
                 "sequencer"
             } else {

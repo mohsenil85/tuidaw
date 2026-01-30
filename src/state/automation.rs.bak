@@ -65,10 +65,10 @@ pub enum AutomationTarget {
     FilterResonance(InstrumentId),
     /// Effect parameter (instrument_id, effect_index, param_index)
     EffectParam(InstrumentId, usize, usize),
-    /// Sample playback rate (for scratching)
+    /// Sampler playback rate (for scratching)
     SampleRate(InstrumentId),
-    /// Sample amplitude
-    SampleAmp(InstrumentId),
+    /// Sampler amplitude
+    SamplerAmp(InstrumentId),
 }
 
 impl AutomationTarget {
@@ -81,7 +81,7 @@ impl AutomationTarget {
             AutomationTarget::FilterResonance(id) => *id,
             AutomationTarget::EffectParam(id, _, _) => *id,
             AutomationTarget::SampleRate(id) => *id,
-            AutomationTarget::SampleAmp(id) => *id,
+            AutomationTarget::SamplerAmp(id) => *id,
         }
     }
 
@@ -96,7 +96,7 @@ impl AutomationTarget {
                 format!("FX{} Param{}", fx_idx + 1, param_idx + 1)
             }
             AutomationTarget::SampleRate(_) => "Sample Rate".to_string(),
-            AutomationTarget::SampleAmp(_) => "Sample Amp".to_string(),
+            AutomationTarget::SamplerAmp(_) => "Sample Amp".to_string(),
         }
     }
 
@@ -109,7 +109,7 @@ impl AutomationTarget {
             AutomationTarget::FilterResonance(_) => (0.0, 1.0),
             AutomationTarget::EffectParam(_, _, _) => (0.0, 1.0),
             AutomationTarget::SampleRate(_) => (-2.0, 2.0), // Allows reverse playback
-            AutomationTarget::SampleAmp(_) => (0.0, 1.0),
+            AutomationTarget::SamplerAmp(_) => (0.0, 1.0),
         }
     }
 }

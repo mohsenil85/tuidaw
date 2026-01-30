@@ -63,7 +63,7 @@ impl MidiCcMapping {
 /// Pitch bend configuration for scratching
 #[derive(Debug, Clone)]
 pub struct PitchBendConfig {
-    /// Target parameter (usually SampleRate for scratching)
+    /// Target parameter (usually SamplerRate for scratching)
     pub target: AutomationTarget,
     /// Value when pitch bend is at center (0)
     pub center_value: f32,
@@ -76,7 +76,7 @@ pub struct PitchBendConfig {
 impl PitchBendConfig {
     pub fn new_for_sampler(instrument_id: InstrumentId) -> Self {
         Self {
-            target: AutomationTarget::SampleRate(instrument_id),
+            target: AutomationTarget::SamplerRate(instrument_id),
             center_value: 1.0, // Normal playback speed
             range: 1.0,        // -0.0 (stopped/reverse) to 2.0 (double speed)
             sensitivity: 1.0,

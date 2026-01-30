@@ -1283,7 +1283,7 @@ impl AudioEngine {
                     }
                 }
             }
-            AutomationTarget::SampleAmp(instrument_id) => {
+            AutomationTarget::SamplerAmp(instrument_id) => {
                 for voice in &self.voice_chains {
                     if voice.instrument_id == *instrument_id {
                         client.set_param(voice.source_node, "amp", value)

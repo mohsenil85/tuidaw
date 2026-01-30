@@ -11,7 +11,7 @@ fn osc_color(osc: OscType) -> Color {
         OscType::Tri => Color::OSC_COLOR,
         OscType::AudioIn => Color::AUDIO_IN_COLOR,
         OscType::Sample => Color::SAMPLE_COLOR,
-        OscType::Kit => Color::KIT_COLOR,
+        OscType::Kit => Color::DRUM_COLOR,
         OscType::Custom(_) => Color::CUSTOM_COLOR,
     }
 }
@@ -271,7 +271,7 @@ impl Pane for InstrumentPane {
 
         // Piano/Pad mode indicator
         if self.pad_keyboard.is_active() {
-            g.set_style(Style::new().fg(Color::BLACK).bg(Color::KIT_COLOR));
+            g.set_style(Style::new().fg(Color::BLACK).bg(Color::DRUM_COLOR));
             let pad_str = self.pad_keyboard.status_label();
             let pad_x = rect.x + rect.width - pad_str.len() as u16 - 1;
             g.put_str(pad_x, rect.y, &pad_str);
