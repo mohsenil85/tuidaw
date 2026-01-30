@@ -1,5 +1,7 @@
 # tuidaw
 
+![ilex](ilex.png)
+
 A terminal-based Digital Audio Workstation built in Rust. Wire up oscillators, filters, and effects in a modular rack, sequence notes in a piano roll, and mix it all down — without leaving the terminal.
 
 Uses [ratatui](https://github.com/ratatui/ratatui) for the TUI and [SuperCollider](https://supercollider.github.io/) (scsynth) for real-time audio synthesis via OSC.
