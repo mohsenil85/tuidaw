@@ -1,11 +1,11 @@
 use std::path::PathBuf;
 
 use crate::audio::{self, AudioEngine};
-use crate::panes::{FileBrowserPane, PianoRollPane, ServerPane, StripEditPane};
+use crate::panes::{FileBrowserPane, InstrumentEditPane, PianoRollPane, ServerPane};
 use crate::scd_parser;
 use crate::state::drum_sequencer::DrumPattern;
 use crate::state::{AppState, CustomSynthDef, MixerSelection, ParamSpec};
-use crate::ui::{Action, Frame, MixerAction, PaneManager, PianoRollAction, SequencerAction, ServerAction, SessionAction, StripAction};
+use crate::ui::{Action, Frame, InstrumentAction, MixerAction, PaneManager, PianoRollAction, SequencerAction, ServerAction, SessionAction};
 
 /// Default path for save file
 pub fn default_rack_path() -> PathBuf {
@@ -31,7 +31,7 @@ pub fn dispatch_action(
     match action {
         Action::Quit => return true,
         Action::Nav(_) => {} // Handled by PaneManager
-        Action::Strip(a) => dispatch_strip(a, state, panes, audio_engine, active_notes),
+        Action::Instrument(a) => dispatch_instrument(a, state, panes, audio_engine, active_notes),
         Action::Mixer(a) => dispatch_mixer(a, state, audio_engine),
         Action::PianoRoll(a) => dispatch_piano_roll(a, state, panes, audio_engine, active_notes),
         Action::Server(a) => dispatch_server(a, state, panes, audio_engine),
@@ -42,48 +42,48 @@ pub fn dispatch_action(
     false
 }
 
-fn dispatch_strip(
-    action: &StripAction,
+fn dispatch_instrument(
+    action: &InstrumentAction,
     state: &mut AppState,
     panes: &mut PaneManager,
     audio_engine: &mut AudioEngine,
     active_notes: &mut Vec<(u32, u8, u32)>,
 ) {
     match action {
-        StripAction::Add(osc_type) => {
-            state.add_strip(*osc_type);
+        InstrumentAction::Add(osc_type) => {
+            state.add_instrument(*osc_type);
             if audio_engine.is_running() {
-                let _ = audio_engine.rebuild_strip_routing(&state.strip, &state.session);
+                let _ = audio_engine.rebuild_instrument_routing(&state.instruments, &state.session);
             }
-            panes.switch_to("strip", &*state);
+            panes.switch_to("instrument", &*state);
         }
-        StripAction::Delete(strip_id) => {
-            let strip_id = *strip_id;
-            state.remove_strip(strip_id);
+        InstrumentAction::Delete(inst_id) => {
+            let inst_id = *inst_id;
+            state.remove_instrument(inst_id);
             if audio_engine.is_running() {
-                let _ = audio_engine.rebuild_strip_routing(&state.strip, &state.session);
+                let _ = audio_engine.rebuild_instrument_routing(&state.instruments, &state.session);
             }
         }
-        StripAction::Edit(id) => {
-            let strip_data = state.strip.strip(*id).cloned();
-            if let Some(strip) = strip_data {
-                if let Some(edit) = panes.get_pane_mut::<StripEditPane>("strip_edit") {
-                    edit.set_strip(&strip);
+        InstrumentAction::Edit(id) => {
+            let inst_data = state.instruments.instrument(*id).cloned();
+            if let Some(inst) = inst_data {
+                if let Some(edit) = panes.get_pane_mut::<InstrumentEditPane>("instrument_edit") {
+                    edit.set_instrument(&inst);
                 }
-                panes.switch_to("strip_edit", &*state);
+                panes.switch_to("instrument_edit", &*state);
             }
         }
-        StripAction::Update(id) => {
+        InstrumentAction::Update(id) => {
             let id = *id;
-            // Apply edits from strip_edit pane back to the strip
-            let edits = panes.get_pane_mut::<StripEditPane>("strip_edit")
+            // Apply edits from instrument_edit pane back to the instrument
+            let edits = panes.get_pane_mut::<InstrumentEditPane>("instrument_edit")
                 .map(|edit| {
-                    let mut dummy = crate::state::strip::Strip::new(id, crate::state::OscType::Saw);
+                    let mut dummy = crate::state::instrument::Instrument::new(id, crate::state::OscType::Saw);
                     edit.apply_to(&mut dummy);
                     dummy
                 });
             if let Some(edited) = edits {
-                if let Some(strip) = state.strip.strip_mut(id) {
+                if let Some(strip) = state.instruments.instrument_mut(id) {
                     strip.source = edited.source;
                     strip.source_params = edited.source_params;
                     strip.filter = edited.filter;
@@ -97,7 +97,7 @@ fn dispatch_strip(
                     }
                 }
                 // Sync piano roll tracks
-                let strips: Vec<(u32, bool)> = state.strip.strips.iter()
+                let strips: Vec<(u32, bool)> = state.instruments.instruments.iter()
                     .map(|s| (s.id, s.has_track))
                     .collect();
                 let pr = &mut state.session.piano_roll;
@@ -110,13 +110,13 @@ fn dispatch_strip(
                 }
             }
             if audio_engine.is_running() {
-                let _ = audio_engine.rebuild_strip_routing(&state.strip, &state.session);
+                let _ = audio_engine.rebuild_instrument_routing(&state.instruments, &state.session);
             }
             // Don't switch pane - stay in edit
         }
-        StripAction::SetParam(strip_id, ref param, value) => {
+        InstrumentAction::SetParam(strip_id, ref param, value) => {
             // Update state
-            if let Some(strip) = state.strip.strip_mut(*strip_id) {
+            if let Some(strip) = state.instruments.instrument_mut(*strip_id) {
                 if let Some(p) = strip.source_params.iter_mut().find(|p| p.name == *param) {
                     p.value = crate::state::ParamValue::Float(*value);
                 }
@@ -126,45 +126,45 @@ fn dispatch_strip(
                 let _ = audio_engine.set_source_param(*strip_id, param, *value);
             }
         }
-        StripAction::PlayNote(pitch, velocity) => {
+        InstrumentAction::PlayNote(pitch, velocity) => {
             let pitch = *pitch;
             let velocity = *velocity;
             // Get the selected strip's id
-            let strip_info: Option<u32> = state.strip.selected_strip().map(|s| s.id);
+            let strip_info: Option<u32> = state.instruments.selected_instrument().map(|s| s.id);
 
             if let Some(strip_id) = strip_info {
                 if audio_engine.is_running() {
                     let vel_f = velocity as f32 / 127.0;
-                    let _ = audio_engine.spawn_voice(strip_id, pitch, vel_f, 0.0, &state.strip, &state.session);
+                    let _ = audio_engine.spawn_voice(strip_id, pitch, vel_f, 0.0, &state.instruments, &state.session);
                     let duration_ticks = 240;
                     active_notes.push((strip_id, pitch, duration_ticks));
                 }
             }
         }
-        StripAction::SelectNext => {
-            state.strip.select_next();
+        InstrumentAction::SelectNext => {
+            state.instruments.select_next();
         }
-        StripAction::SelectPrev => {
-            state.strip.select_prev();
+        InstrumentAction::SelectPrev => {
+            state.instruments.select_prev();
         }
-        StripAction::SelectFirst => {
-            if !state.strip.strips.is_empty() {
-                state.strip.selected = Some(0);
+        InstrumentAction::SelectFirst => {
+            if !state.instruments.instruments.is_empty() {
+                state.instruments.selected = Some(0);
             }
         }
-        StripAction::SelectLast => {
-            if !state.strip.strips.is_empty() {
-                state.strip.selected = Some(state.strip.strips.len() - 1);
+        InstrumentAction::SelectLast => {
+            if !state.instruments.instruments.is_empty() {
+                state.instruments.selected = Some(state.instruments.instruments.len() - 1);
             }
         }
-        StripAction::PlayDrumPad(pad_idx) => {
-            if let Some(strip) = state.strip.selected_strip() {
+        InstrumentAction::PlayDrumPad(pad_idx) => {
+            if let Some(strip) = state.instruments.selected_instrument() {
                 if let Some(seq) = &strip.drum_sequencer {
                     if let Some(pad) = seq.pads.get(*pad_idx) {
                         if let (Some(buffer_id), strip_id) = (pad.buffer_id, strip.id) {
                             let amp = pad.level;
                             if audio_engine.is_running() {
-                                let _ = audio_engine.play_drum_hit_to_strip(
+                                let _ = audio_engine.play_drum_hit_to_instrument(
                                     buffer_id, amp, strip_id,
                                 );
                             }
@@ -173,12 +173,12 @@ fn dispatch_strip(
                 }
             }
         }
-        StripAction::AddEffect(_, _)
-        | StripAction::RemoveEffect(_, _)
-        | StripAction::MoveEffect(_, _, _)
-        | StripAction::SetFilter(_, _)
-        | StripAction::ToggleTrack(_) => {
-            // Reserved for future direct dispatch (currently handled inside StripEditPane)
+        InstrumentAction::AddEffect(_, _)
+        | InstrumentAction::RemoveEffect(_, _)
+        | InstrumentAction::MoveEffect(_, _, _)
+        | InstrumentAction::SetFilter(_, _)
+        | InstrumentAction::ToggleTrack(_) => {
+            // Reserved for future direct dispatch (currently handled inside InstrumentEditPane)
         }
     }
 }
@@ -198,8 +198,8 @@ fn dispatch_mixer(
         MixerAction::AdjustLevel(delta) => {
             let mut bus_update: Option<(u8, f32, bool, f32)> = None;
             match state.session.mixer_selection {
-                MixerSelection::Strip(idx) => {
-                    if let Some(strip) = state.strip.strips.get_mut(idx) {
+                MixerSelection::Instrument(idx) => {
+                    if let Some(strip) = state.instruments.instruments.get_mut(idx) {
                         strip.level = (strip.level + delta).clamp(0.0, 1.0);
                     }
                 }
@@ -220,14 +220,14 @@ fn dispatch_mixer(
                 if let Some((bus_id, level, mute, pan)) = bus_update {
                     let _ = audio_engine.set_bus_mixer_params(bus_id, level, mute, pan);
                 }
-                let _ = audio_engine.update_all_strip_mixer_params(&state.strip, &state.session);
+                let _ = audio_engine.update_all_instrument_mixer_params(&state.instruments, &state.session);
             }
         }
         MixerAction::ToggleMute => {
             let mut bus_update: Option<(u8, f32, bool, f32)> = None;
             match state.session.mixer_selection {
-                MixerSelection::Strip(idx) => {
-                    if let Some(strip) = state.strip.strips.get_mut(idx) {
+                MixerSelection::Instrument(idx) => {
+                    if let Some(strip) = state.instruments.instruments.get_mut(idx) {
                         strip.mute = !strip.mute;
                     }
                 }
@@ -248,14 +248,14 @@ fn dispatch_mixer(
                 if let Some((bus_id, level, mute, pan)) = bus_update {
                     let _ = audio_engine.set_bus_mixer_params(bus_id, level, mute, pan);
                 }
-                let _ = audio_engine.update_all_strip_mixer_params(&state.strip, &state.session);
+                let _ = audio_engine.update_all_instrument_mixer_params(&state.instruments, &state.session);
             }
         }
         MixerAction::ToggleSolo => {
             let mut bus_updates: Vec<(u8, f32, bool, f32)> = Vec::new();
             match state.session.mixer_selection {
-                MixerSelection::Strip(idx) => {
-                    if let Some(strip) = state.strip.strips.get_mut(idx) {
+                MixerSelection::Instrument(idx) => {
+                    if let Some(strip) = state.instruments.instruments.get_mut(idx) {
                         strip.solo = !strip.solo;
                     }
                 }
@@ -274,7 +274,7 @@ fn dispatch_mixer(
                 for (bus_id, level, mute, pan) in bus_updates {
                     let _ = audio_engine.set_bus_mixer_params(bus_id, level, mute, pan);
                 }
-                let _ = audio_engine.update_all_strip_mixer_params(&state.strip, &state.session);
+                let _ = audio_engine.update_all_instrument_mixer_params(&state.instruments, &state.session);
             }
         }
         MixerAction::CycleSection => {
@@ -289,8 +289,8 @@ fn dispatch_mixer(
         MixerAction::AdjustSend(bus_id, delta) => {
             let bus_id = *bus_id;
             let delta = *delta;
-            if let MixerSelection::Strip(idx) = state.session.mixer_selection {
-                if let Some(strip) = state.strip.strips.get_mut(idx) {
+            if let MixerSelection::Instrument(idx) = state.session.mixer_selection {
+                if let Some(strip) = state.instruments.instruments.get_mut(idx) {
                     if let Some(send) = strip.sends.iter_mut().find(|s| s.bus_id == bus_id) {
                         send.level = (send.level + delta).clamp(0.0, 1.0);
                     }
@@ -299,8 +299,8 @@ fn dispatch_mixer(
         }
         MixerAction::ToggleSend(bus_id) => {
             let bus_id = *bus_id;
-            if let MixerSelection::Strip(idx) = state.session.mixer_selection {
-                if let Some(strip) = state.strip.strips.get_mut(idx) {
+            if let MixerSelection::Instrument(idx) = state.session.mixer_selection {
+                if let Some(strip) = state.instruments.instruments.get_mut(idx) {
                     if let Some(send) = strip.sends.iter_mut().find(|s| s.bus_id == bus_id) {
                         send.enabled = !send.enabled;
                         if send.enabled && send.level <= 0.0 {
@@ -310,7 +310,7 @@ fn dispatch_mixer(
                 }
             }
             if audio_engine.is_running() {
-                let _ = audio_engine.rebuild_strip_routing(&state.strip, &state.session);
+                let _ = audio_engine.rebuild_instrument_routing(&state.instruments, &state.session);
             }
         }
     }
@@ -449,7 +449,7 @@ fn dispatch_piano_roll(
             if let Some(strip_id) = track_strip_id {
                 if audio_engine.is_running() {
                     let vel_f = velocity as f32 / 127.0;
-                    let _ = audio_engine.spawn_voice(strip_id, pitch, vel_f, 0.0, &state.strip, &state.session);
+                    let _ = audio_engine.spawn_voice(strip_id, pitch, vel_f, 0.0, &state.instruments, &state.session);
                     let duration_ticks = 240; // Half beat for staccato feel
                     active_notes.push((strip_id, pitch, duration_ticks));
                 }
@@ -499,7 +499,7 @@ fn dispatch_server(
                         };
 
                         // Load drum sequencer samples for all drum machine strips
-                        for strip in &state.strip.strips {
+                        for strip in &state.instruments.instruments {
                             if let Some(seq) = &strip.drum_sequencer {
                                 for pad in &seq.pads {
                                     if let Some(buffer_id) = pad.buffer_id {
@@ -618,7 +618,7 @@ fn dispatch_session(
             }
             // Sync piano roll time_signature from session
             state.session.piano_roll.time_signature = state.session.time_signature;
-            if let Err(e) = crate::state::persistence::save_project(&path, &state.session, &state.strip) {
+            if let Err(e) = crate::state::persistence::save_project(&path, &state.session, &state.instruments) {
                 eprintln!("Failed to save: {}", e);
             }
             let name = path.file_stem()
@@ -633,7 +633,7 @@ fn dispatch_session(
                 match crate::state::persistence::load_project(&path) {
                     Ok((loaded_session, loaded_strip)) => {
                         state.session = loaded_session;
-                        state.strip = loaded_strip;
+                        state.instruments = loaded_strip;
                         let name = path.file_stem()
                             .and_then(|s| s.to_str())
                             .unwrap_or("default")
@@ -650,7 +650,7 @@ fn dispatch_session(
             state.session.apply_musical_settings(settings);
             state.session.piano_roll.time_signature = state.session.time_signature;
             state.session.piano_roll.bpm = state.session.bpm as f32;
-            panes.switch_to("strip", &*state);
+            panes.switch_to("instrument", &*state);
         }
         SessionAction::OpenFileBrowser(ref file_action) => {
             if let Some(fb) = panes.get_pane_mut::<FileBrowserPane>("file_browser") {
@@ -744,7 +744,7 @@ fn dispatch_sequencer(
 ) {
     match action {
         SequencerAction::ToggleStep(pad_idx, step_idx) => {
-            if let Some(seq) = state.strip.selected_drum_sequencer_mut() {
+            if let Some(seq) = state.instruments.selected_drum_sequencer_mut() {
                 if let Some(step) = seq
                     .pattern_mut()
                     .steps
@@ -756,7 +756,7 @@ fn dispatch_sequencer(
             }
         }
         SequencerAction::AdjustVelocity(pad_idx, step_idx, delta) => {
-            if let Some(seq) = state.strip.selected_drum_sequencer_mut() {
+            if let Some(seq) = state.instruments.selected_drum_sequencer_mut() {
                 if let Some(step) = seq
                     .pattern_mut()
                     .steps
@@ -768,7 +768,7 @@ fn dispatch_sequencer(
             }
         }
         SequencerAction::ClearPad(pad_idx) => {
-            if let Some(seq) = state.strip.selected_drum_sequencer_mut() {
+            if let Some(seq) = state.instruments.selected_drum_sequencer_mut() {
                 for step in seq
                     .pattern_mut()
                     .steps
@@ -781,13 +781,13 @@ fn dispatch_sequencer(
             }
         }
         SequencerAction::ClearPattern => {
-            if let Some(seq) = state.strip.selected_drum_sequencer_mut() {
+            if let Some(seq) = state.instruments.selected_drum_sequencer_mut() {
                 let len = seq.pattern().length;
                 *seq.pattern_mut() = DrumPattern::new(len);
             }
         }
         SequencerAction::CyclePatternLength => {
-            if let Some(seq) = state.strip.selected_drum_sequencer_mut() {
+            if let Some(seq) = state.instruments.selected_drum_sequencer_mut() {
                 let lengths = [8, 16, 32, 64];
                 let current = seq.pattern().length;
                 let idx = lengths.iter().position(|&l| l == current).unwrap_or(0);
@@ -805,12 +805,12 @@ fn dispatch_sequencer(
             }
         }
         SequencerAction::NextPattern => {
-            if let Some(seq) = state.strip.selected_drum_sequencer_mut() {
+            if let Some(seq) = state.instruments.selected_drum_sequencer_mut() {
                 seq.current_pattern = (seq.current_pattern + 1) % seq.patterns.len();
             }
         }
         SequencerAction::PrevPattern => {
-            if let Some(seq) = state.strip.selected_drum_sequencer_mut() {
+            if let Some(seq) = state.instruments.selected_drum_sequencer_mut() {
                 seq.current_pattern = if seq.current_pattern == 0 {
                     seq.patterns.len() - 1
                 } else {
@@ -819,14 +819,14 @@ fn dispatch_sequencer(
             }
         }
         SequencerAction::AdjustPadLevel(pad_idx, delta) => {
-            if let Some(seq) = state.strip.selected_drum_sequencer_mut() {
+            if let Some(seq) = state.instruments.selected_drum_sequencer_mut() {
                 if let Some(pad) = seq.pads.get_mut(*pad_idx) {
                     pad.level = (pad.level + delta).clamp(0.0, 1.0);
                 }
             }
         }
         SequencerAction::PlayStop => {
-            if let Some(seq) = state.strip.selected_drum_sequencer_mut() {
+            if let Some(seq) = state.instruments.selected_drum_sequencer_mut() {
                 seq.playing = !seq.playing;
                 if !seq.playing {
                     seq.current_step = 0;
@@ -850,7 +850,7 @@ fn dispatch_sequencer(
                 .map(|s| s.to_string_lossy().to_string())
                 .unwrap_or_default();
 
-            if let Some(seq) = state.strip.selected_drum_sequencer_mut() {
+            if let Some(seq) = state.instruments.selected_drum_sequencer_mut() {
                 let buffer_id = seq.next_buffer_id;
                 seq.next_buffer_id += 1;
 

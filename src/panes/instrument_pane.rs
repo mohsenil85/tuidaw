@@ -1,7 +1,7 @@
 use std::any::Any;
 
 use crate::state::{AppState, OscType};
-use crate::ui::{Action, NavAction, StripAction, SessionAction, Color, Graphics, InputEvent, KeyCode, Keymap, PadKeyboard, Pane, PianoKeyboard, Rect, Style};
+use crate::ui::{Action, NavAction, InstrumentAction, SessionAction, Color, Graphics, InputEvent, KeyCode, Keymap, PadKeyboard, Pane, PianoKeyboard, Rect, Style};
 
 fn osc_color(osc: OscType) -> Color {
     match osc {
@@ -16,24 +16,24 @@ fn osc_color(osc: OscType) -> Color {
     }
 }
 
-pub struct StripPane {
+pub struct InstrumentPane {
     keymap: Keymap,
     piano: PianoKeyboard,
     pad_keyboard: PadKeyboard,
 }
 
-impl StripPane {
+impl InstrumentPane {
     pub fn new() -> Self {
         Self {
             keymap: Keymap::new()
                 .bind('q', "quit", "Quit the application")
-                .bind_key(KeyCode::Down, "next", "Next strip")
-                .bind_key(KeyCode::Up, "prev", "Previous strip")
+                .bind_key(KeyCode::Down, "next", "Next instrument")
+                .bind_key(KeyCode::Up, "prev", "Previous instrument")
                 .bind_key(KeyCode::Home, "goto_top", "Go to top")
                 .bind_key(KeyCode::End, "goto_bottom", "Go to bottom")
-                .bind('a', "add", "Add strip")
-                .bind('d', "delete", "Delete strip")
-                .bind_key(KeyCode::Enter, "edit", "Edit strip")
+                .bind('a', "add", "Add instrument")
+                .bind('d', "delete", "Delete instrument")
+                .bind_key(KeyCode::Enter, "edit", "Edit instrument")
                 .bind('w', "save", "Save")
                 .bind('o', "load", "Load")
                 .bind('/', "piano_mode", "Toggle piano keyboard mode"),
@@ -42,18 +42,18 @@ impl StripPane {
         }
     }
 
-    fn format_filter(strip: &crate::state::strip::Strip) -> String {
-        match &strip.filter {
+    fn format_filter(instrument: &crate::state::instrument::Instrument) -> String {
+        match &instrument.filter {
             Some(f) => format!("[{}]", f.filter_type.name()),
             None => "---".to_string(),
         }
     }
 
-    fn format_effects(strip: &crate::state::strip::Strip) -> String {
-        if strip.effects.is_empty() {
+    fn format_effects(instrument: &crate::state::instrument::Instrument) -> String {
+        if instrument.effects.is_empty() {
             return "---".to_string();
         }
-        strip.effects.iter()
+        instrument.effects.iter()
             .map(|e| e.effect_type.name())
             .collect::<Vec<_>>()
             .join(", ")
@@ -66,15 +66,15 @@ impl StripPane {
     }
 }
 
-impl Default for StripPane {
+impl Default for InstrumentPane {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl Pane for StripPane {
+impl Pane for InstrumentPane {
     fn id(&self) -> &'static str {
-        "strip"
+        "instrument"
     }
 
     fn handle_input(&mut self, event: InputEvent, state: &AppState) -> Action {
@@ -86,14 +86,14 @@ impl Pane for StripPane {
                     return Action::None;
                 }
                 KeyCode::Up => {
-                    return Action::Strip(StripAction::SelectPrev);
+                    return Action::Instrument(InstrumentAction::SelectPrev);
                 }
                 KeyCode::Down => {
-                    return Action::Strip(StripAction::SelectNext);
+                    return Action::Instrument(InstrumentAction::SelectNext);
                 }
                 KeyCode::Char(c) => {
                     if let Some(pad_idx) = self.pad_keyboard.key_to_pad(c) {
-                        return Action::Strip(StripAction::PlayDrumPad(pad_idx));
+                        return Action::Instrument(InstrumentAction::PlayDrumPad(pad_idx));
                     }
                     return Action::None;
                 }
@@ -117,15 +117,15 @@ impl Pane for StripPane {
                     return Action::None;
                 }
                 KeyCode::Up => {
-                    return Action::Strip(StripAction::SelectPrev);
+                    return Action::Instrument(InstrumentAction::SelectPrev);
                 }
                 KeyCode::Down => {
-                    return Action::Strip(StripAction::SelectNext);
+                    return Action::Instrument(InstrumentAction::SelectNext);
                 }
                 KeyCode::Char(c) => {
                     if let Some(pitch) = self.piano.key_to_pitch(c) {
                         let velocity = if event.modifiers.shift { 127 } else { 100 };
-                        return Action::Strip(StripAction::PlayNote(pitch, velocity));
+                        return Action::Instrument(InstrumentAction::PlayNote(pitch, velocity));
                     }
                     return Action::None;
                 }
@@ -135,21 +135,21 @@ impl Pane for StripPane {
 
         match self.keymap.lookup(&event) {
             Some("quit") => Action::Quit,
-            Some("next") => Action::Strip(StripAction::SelectNext),
-            Some("prev") => Action::Strip(StripAction::SelectPrev),
-            Some("goto_top") => Action::Strip(StripAction::SelectFirst),
-            Some("goto_bottom") => Action::Strip(StripAction::SelectLast),
+            Some("next") => Action::Instrument(InstrumentAction::SelectNext),
+            Some("prev") => Action::Instrument(InstrumentAction::SelectPrev),
+            Some("goto_top") => Action::Instrument(InstrumentAction::SelectFirst),
+            Some("goto_bottom") => Action::Instrument(InstrumentAction::SelectLast),
             Some("add") => Action::Nav(NavAction::SwitchPane("add")),
             Some("delete") => {
-                if let Some(strip) = state.strip.selected_strip() {
-                    Action::Strip(StripAction::Delete(strip.id))
+                if let Some(instrument) = state.instruments.selected_instrument() {
+                    Action::Instrument(InstrumentAction::Delete(instrument.id))
                 } else {
                     Action::None
                 }
             }
             Some("edit") => {
-                if let Some(strip) = state.strip.selected_strip() {
-                    Action::Strip(StripAction::Edit(strip.id))
+                if let Some(instrument) = state.instruments.selected_instrument() {
+                    Action::Instrument(InstrumentAction::Edit(instrument.id))
                 } else {
                     Action::None
                 }
@@ -158,7 +158,7 @@ impl Pane for StripPane {
             Some("load") => Action::Session(SessionAction::Load),
             Some("piano_mode") => {
                 // Activate pad keyboard for drum machines, piano for everything else
-                if state.strip.selected_strip()
+                if state.instruments.selected_instrument()
                     .map_or(false, |s| s.source.is_drum_machine())
                 {
                     self.pad_keyboard.activate();
@@ -178,33 +178,33 @@ impl Pane for StripPane {
         let rect = Rect::centered(width, height, box_width, box_height);
 
         g.set_style(Style::new().fg(Color::CYAN));
-        g.draw_box(rect, Some(" Strips "));
+        g.draw_box(rect, Some(" Instruments "));
 
         let content_x = rect.x + 2;
         let content_y = rect.y + 2;
 
         g.set_style(Style::new().fg(Color::CYAN).bold());
-        g.put_str(content_x, content_y, "Instrument Strips:");
+        g.put_str(content_x, content_y, "Instruments:");
 
         let list_y = content_y + 2;
         let max_visible = ((rect.height - 8) as usize).max(3);
 
-        if state.strip.strips.is_empty() {
+        if state.instruments.instruments.is_empty() {
             g.set_style(Style::new().fg(Color::DARK_GRAY));
-            g.put_str(content_x + 2, list_y, "(no strips — press 'a' to add)");
+            g.put_str(content_x + 2, list_y, "(no instruments — press 'a' to add)");
         }
 
-        let scroll_offset = state.strip.selected
+        let scroll_offset = state.instruments.selected
             .map(|s| if s >= max_visible { s - max_visible + 1 } else { 0 })
             .unwrap_or(0);
 
-        for (i, strip) in state.strip.strips.iter().enumerate().skip(scroll_offset) {
+        for (i, instrument) in state.instruments.instruments.iter().enumerate().skip(scroll_offset) {
             let row = i - scroll_offset;
             if row >= max_visible {
                 break;
             }
             let y = list_y + row as u16;
-            let is_selected = state.strip.selected == Some(i);
+            let is_selected = state.instruments.selected == Some(i);
 
             // Selection indicator
             if is_selected {
@@ -215,8 +215,8 @@ impl Pane for StripPane {
                 g.put_str(content_x, y, " ");
             }
 
-            // Strip name
-            let name_str = format!("{:14}", &strip.name[..strip.name.len().min(14)]);
+            // Instrument name
+            let name_str = format!("{:14}", &instrument.name[..instrument.name.len().min(14)]);
             if is_selected {
                 g.set_style(Style::new().fg(Color::WHITE).bg(Color::SELECTION_BG));
             } else {
@@ -225,16 +225,16 @@ impl Pane for StripPane {
             g.put_str(content_x + 2, y, &name_str);
 
             // Osc type
-            let osc_c = osc_color(strip.source);
+            let osc_c = osc_color(instrument.source);
             if is_selected {
                 g.set_style(Style::new().fg(osc_c).bg(Color::SELECTION_BG));
             } else {
                 g.set_style(Style::new().fg(osc_c));
             }
-            g.put_str(content_x + 17, y, &format!("{:10}", strip.source.name()));
+            g.put_str(content_x + 17, y, &format!("{:10}", instrument.source.name()));
 
             // Filter
-            let filter_str = Self::format_filter(strip);
+            let filter_str = Self::format_filter(instrument);
             if is_selected {
                 g.set_style(Style::new().fg(Color::FILTER_COLOR).bg(Color::SELECTION_BG));
             } else {
@@ -243,7 +243,7 @@ impl Pane for StripPane {
             g.put_str(content_x + 28, y, &format!("{:12}", filter_str));
 
             // Effects
-            let fx_str = Self::format_effects(strip);
+            let fx_str = Self::format_effects(instrument);
             if is_selected {
                 g.set_style(Style::new().fg(Color::FX_COLOR).bg(Color::SELECTION_BG));
             } else {
@@ -252,7 +252,7 @@ impl Pane for StripPane {
             g.put_str(content_x + 41, y, &format!("{:18}", &fx_str[..fx_str.len().min(18)]));
 
             // Level bar
-            let level_str = Self::format_level(strip.level);
+            let level_str = Self::format_level(instrument.level);
             if is_selected {
                 g.set_style(Style::new().fg(Color::LIME).bg(Color::SELECTION_BG));
             } else {
@@ -275,7 +275,7 @@ impl Pane for StripPane {
             g.set_style(Style::new().fg(Color::ORANGE));
             g.put_str(rect.x + rect.width - 4, list_y, "...");
         }
-        if scroll_offset + max_visible < state.strip.strips.len() {
+        if scroll_offset + max_visible < state.instruments.instruments.len() {
             g.set_style(Style::new().fg(Color::ORANGE));
             g.put_str(rect.x + rect.width - 4, list_y + max_visible as u16 - 1, "...");
         }
@@ -299,7 +299,7 @@ impl Pane for StripPane {
         if self.pad_keyboard.is_active() {
             g.put_str(content_x, help_y, "R T Y U / F G H J / V B N M: trigger pads | /: exit pad mode");
         } else if self.piano.is_active() {
-            g.put_str(content_x, help_y, "Play keys | [/]: octave | ↑/↓: select strip | /: cycle layout/exit");
+            g.put_str(content_x, help_y, "Play keys | [/]: octave | ↑/↓: select instrument | /: cycle layout/exit");
         } else {
             g.put_str(content_x, help_y, "a: add | d: delete | Enter: edit | /: piano | w: save | o: load");
         }

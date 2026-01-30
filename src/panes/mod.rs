@@ -7,8 +7,8 @@ mod mixer_pane;
 mod piano_roll_pane;
 mod sequencer_pane;
 mod server_pane;
-mod strip_edit_pane;
-mod strip_pane;
+mod instrument_edit_pane;
+mod instrument_pane;
 
 pub use add_pane::AddPane;
 pub use file_browser_pane::FileBrowserPane;
@@ -19,5 +19,5 @@ pub use mixer_pane::MixerPane;
 pub use piano_roll_pane::PianoRollPane;
 pub use sequencer_pane::SequencerPane;
 pub use server_pane::ServerPane;
-pub use strip_edit_pane::StripEditPane;
-pub use strip_pane::StripPane;
+pub use instrument_edit_pane::InstrumentEditPane;
+pub use instrument_pane::InstrumentPane;

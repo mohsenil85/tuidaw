@@ -38,7 +38,7 @@ pub fn auto_start_sc(
                         // Wait for scsynth to finish processing /d_recv messages
                         std::thread::sleep(std::time::Duration::from_millis(500));
                         // Rebuild routing
-                        let _ = audio_engine.rebuild_strip_routing(&state.strip, &state.session);
+                        let _ = audio_engine.rebuild_instrument_routing(&state.instruments, &state.session);
                     }
                 }
                 Err(e) => {

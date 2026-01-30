@@ -12,7 +12,7 @@ mod ui;
 use std::time::{Duration, Instant};
 
 use audio::AudioEngine;
-use panes::{AddPane, FileBrowserPane, FrameEditPane, HelpPane, HomePane, MixerPane, PianoRollPane, SequencerPane, ServerPane, StripEditPane, StripPane};
+use panes::{AddPane, FileBrowserPane, FrameEditPane, HelpPane, HomePane, InstrumentEditPane, InstrumentPane, MixerPane, PianoRollPane, SequencerPane, ServerPane};
 use state::AppState;
 use ui::{
     Action, Frame, InputSource, KeyCode, PaneManager, RatatuiBackend, SessionAction, ViewState,
@@ -30,10 +30,10 @@ fn main() -> std::io::Result<()> {
 
 fn run(backend: &mut RatatuiBackend) -> std::io::Result<()> {
     let mut state = AppState::new();
-    let mut panes = PaneManager::new(Box::new(StripPane::new()));
+    let mut panes = PaneManager::new(Box::new(InstrumentPane::new()));
     panes.add_pane(Box::new(HomePane::new()));
     panes.add_pane(Box::new(AddPane::new()));
-    panes.add_pane(Box::new(StripEditPane::new()));
+    panes.add_pane(Box::new(InstrumentEditPane::new()));
     panes.add_pane(Box::new(ServerPane::new()));
     panes.add_pane(Box::new(MixerPane::new()));
     panes.add_pane(Box::new(HelpPane::new()));
@@ -72,7 +72,7 @@ fn run(backend: &mut RatatuiBackend) -> std::io::Result<()> {
             if event.key == KeyCode::Char('.') {
                 state.session.master_mute = !state.session.master_mute;
                 if audio_engine.is_running() {
-                    let _ = audio_engine.update_all_strip_mixer_params(&state.strip, &state.session);
+                    let _ = audio_engine.update_all_instrument_mixer_params(&state.instruments, &state.session);
                 }
                 continue;
             }
@@ -83,19 +83,19 @@ fn run(backend: &mut RatatuiBackend) -> std::io::Result<()> {
                 // Helper to capture current view state
                 let capture_view = |panes: &mut PaneManager, state: &AppState| -> ViewState {
                     let pane_id = panes.active().id().to_string();
-                    let strip_selection = state.strip.selected;
-                    let edit_tab = panes.get_pane_mut::<StripEditPane>("strip_edit")
+                    let inst_selection = state.instruments.selected;
+                    let edit_tab = panes.get_pane_mut::<InstrumentEditPane>("instrument_edit")
                         .map(|ep| ep.tab_index())
                         .unwrap_or(0);
-                    ViewState { pane_id, strip_selection, edit_tab }
+                    ViewState { pane_id, inst_selection, edit_tab }
                 };
 
                 // Helper to restore view state
                 let restore_view = |panes: &mut PaneManager, state: &mut AppState, view: &ViewState| {
-                    // Restore strip selection first
-                    state.strip.selected = view.strip_selection;
+                    // Restore instrument selection first
+                    state.instruments.selected = view.inst_selection;
                     // Restore edit tab
-                    if let Some(edit_pane) = panes.get_pane_mut::<StripEditPane>("strip_edit") {
+                    if let Some(edit_pane) = panes.get_pane_mut::<InstrumentEditPane>("instrument_edit") {
                         edit_pane.set_tab_index(view.edit_tab);
                     }
                     // Switch to the pane
@@ -103,10 +103,10 @@ fn run(backend: &mut RatatuiBackend) -> std::io::Result<()> {
                 };
 
                 let (target, is_push) = match c {
-                    '1' => (Some("strip"), false),
+                    '1' => (Some("instrument"), false),
                     '2' => {
                         // Context-dependent: step sequencer for drum machines, piano roll otherwise
-                        let target = if state.strip.selected_strip()
+                        let target = if state.instruments.selected_instrument()
                             .map_or(false, |s| s.source.is_drum_machine())
                         {
                             "sequencer"
@@ -140,13 +140,13 @@ fn run(backend: &mut RatatuiBackend) -> std::io::Result<()> {
                             let current_id = panes.active().id();
                             let current_keymap = panes.active().keymap().clone();
                             let title = match current_id {
-                                "strip" => "Strips",
+                                "instrument" => "Instruments",
                                 "mixer" => "Mixer",
                                 "server" => "Server",
                                 "piano_roll" => "Piano Roll",
                                 "sequencer" => "Step Sequencer",
-                                "add" => "Add Strip",
-                                "strip_edit" => "Edit Strip",
+                                "add" => "Add Instrument",
+                                "instrument_edit" => "Edit Instrument",
                                 _ => current_id,
                             };
                             if let Some(help) = panes.get_pane_mut::<HelpPane>("help") {
@@ -216,7 +216,7 @@ fn run(backend: &mut RatatuiBackend) -> std::io::Result<()> {
                 .map(|p| p.current_track()).unwrap_or(0);
             state.audio_in_waveform = state.session.piano_roll
                 .track_at(track)
-                .and_then(|t| state.strip.strip(t.module_id))
+                .and_then(|t| state.instruments.instrument(t.module_id))
                 .filter(|s| s.source.is_audio_input())
                 .map(|s| audio_engine.audio_in_waveform(s.id));
         } else {

@@ -13,7 +13,7 @@ const BLOCK_CHARS: [char; 8] = ['▁', '▂', '▃', '▄', '▅', '▆', '▇',
 #[derive(Debug, Clone)]
 pub struct ViewState {
     pub pane_id: String,
-    pub strip_selection: Option<usize>,
+    pub inst_selection: Option<usize>,
     pub edit_tab: u8,
 }
 

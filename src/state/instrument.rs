@@ -3,7 +3,7 @@ use super::drum_sequencer::DrumSequencerState;
 use super::param::{Param, ParamValue};
 use super::sampler::SamplerConfig;
 
-pub type StripId = u32;
+pub type InstrumentId = u32;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OscType {
@@ -375,7 +375,7 @@ pub struct ModulatedParam {
 pub enum ModSource {
     Lfo(LfoConfig),
     Envelope(EnvConfig),
-    StripParam(StripId, String),
+    StripParam(InstrumentId, String),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -422,7 +422,7 @@ impl LfoShape {
 
 // TODO: Currently only FilterCutoff is wired up in the audio engine.
 // To implement each target, add a `*_mod_in` param to the relevant SynthDef,
-// then wire it up in AudioEngine::rebuild_strip_routing.
+// then wire it up in AudioEngine::rebuild_instrument_routing.
 //
 // Implementation notes per target:
 //   FilterCutoff   - DONE (filter SynthDefs have cutoff_mod_in)
@@ -580,8 +580,8 @@ impl EffectSlot {
 pub const MAX_BUSES: usize = 8;
 
 #[derive(Debug, Clone)]
-pub struct Strip {
-    pub id: StripId,
+pub struct Instrument {
+    pub id: InstrumentId,
     pub name: String,
     pub source: OscType,
     pub source_params: Vec<Param>,
@@ -604,8 +604,8 @@ pub struct Strip {
     pub drum_sequencer: Option<DrumSequencerState>,
 }
 
-impl Strip {
-    pub fn new(id: StripId, source: OscType) -> Self {
+impl Instrument {
+    pub fn new(id: InstrumentId, source: OscType) -> Self {
         let sends = (1..=MAX_BUSES as u8).map(MixerSend::new).collect();
         // Audio input and drum machine strips don't have piano roll tracks
         let has_track = !source.is_audio_input() && !source.is_drum_machine();

@@ -2,10 +2,10 @@ use std::any::Any;
 
 use crate::state::{
     AppState, EffectSlot, EffectType, EnvConfig, FilterConfig, FilterType, LfoConfig,
-    OscType, Param, ParamValue, StripId, Strip,
+    OscType, Param, ParamValue, InstrumentId, Instrument,
 };
 use crate::ui::widgets::TextInput;
-use crate::ui::{Action, Color, Graphics, InputEvent, KeyCode, Keymap, Pane, PianoKeyboard, Rect, StripAction, Style};
+use crate::ui::{Action, Color, Graphics, InputEvent, KeyCode, Keymap, Pane, PianoKeyboard, Rect, InstrumentAction, Style};
 
 /// Which section a row belongs to
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -17,10 +17,10 @@ enum Section {
     Envelope,
 }
 
-pub struct StripEditPane {
+pub struct InstrumentEditPane {
     keymap: Keymap,
-    strip_id: Option<StripId>,
-    strip_name: String,
+    instrument_id: Option<InstrumentId>,
+    instrument_name: String,
     source: OscType,
     source_params: Vec<Param>,
     filter: Option<FilterConfig>,
@@ -35,7 +35,7 @@ pub struct StripEditPane {
     piano: PianoKeyboard,
 }
 
-impl StripEditPane {
+impl InstrumentEditPane {
     pub fn new() -> Self {
         Self {
             keymap: Keymap::new()
@@ -60,8 +60,8 @@ impl StripEditPane {
                 .bind('l', "toggle_lfo", "Toggle LFO on/off")
                 .bind('s', "cycle_lfo_shape", "Cycle LFO shape")
                 .bind('m', "cycle_lfo_target", "Cycle LFO target"),
-            strip_id: None,
-            strip_name: String::new(),
+            instrument_id: None,
+            instrument_name: String::new(),
             source: OscType::Saw,
             source_params: Vec::new(),
             filter: None,
@@ -77,23 +77,23 @@ impl StripEditPane {
         }
     }
 
-    pub fn set_strip(&mut self, strip: &Strip) {
-        self.strip_id = Some(strip.id);
-        self.strip_name = strip.name.clone();
-        self.source = strip.source;
-        self.source_params = strip.source_params.clone();
-        self.filter = strip.filter.clone();
-        self.effects = strip.effects.clone();
-        self.lfo = strip.lfo.clone();
-        self.amp_envelope = strip.amp_envelope.clone();
-        self.polyphonic = strip.polyphonic;
-        self.has_track = strip.has_track;
+    pub fn set_instrument(&mut self, instrument: &Instrument) {
+        self.instrument_id = Some(instrument.id);
+        self.instrument_name = instrument.name.clone();
+        self.source = instrument.source;
+        self.source_params = instrument.source_params.clone();
+        self.filter = instrument.filter.clone();
+        self.effects = instrument.effects.clone();
+        self.lfo = instrument.lfo.clone();
+        self.amp_envelope = instrument.amp_envelope.clone();
+        self.polyphonic = instrument.polyphonic;
+        self.has_track = instrument.has_track;
         self.selected_row = 0;
     }
 
     #[allow(dead_code)]
-    pub fn strip_id(&self) -> Option<StripId> {
-        self.strip_id
+    pub fn instrument_id(&self) -> Option<InstrumentId> {
+        self.instrument_id
     }
 
     /// Get current tab as index (for view state - now section based)
@@ -127,16 +127,16 @@ impl StripEditPane {
         }
     }
 
-    /// Apply edits back to a strip
-    pub fn apply_to(&self, strip: &mut Strip) {
-        strip.source = self.source;
-        strip.source_params = self.source_params.clone();
-        strip.filter = self.filter.clone();
-        strip.effects = self.effects.clone();
-        strip.lfo = self.lfo.clone();
-        strip.amp_envelope = self.amp_envelope.clone();
-        strip.polyphonic = self.polyphonic;
-        strip.has_track = self.has_track;
+    /// Apply edits back to an instrument
+    pub fn apply_to(&self, instrument: &mut Instrument) {
+        instrument.source = self.source;
+        instrument.source_params = self.source_params.clone();
+        instrument.filter = self.filter.clone();
+        instrument.effects = self.effects.clone();
+        instrument.lfo = self.lfo.clone();
+        instrument.amp_envelope = self.amp_envelope.clone();
+        instrument.polyphonic = self.polyphonic;
+        instrument.has_track = self.has_track;
     }
 
     /// Total number of selectable rows across all sections
@@ -265,8 +265,8 @@ impl StripEditPane {
     }
 
     fn emit_update(&self) -> Action {
-        if let Some(id) = self.strip_id {
-            Action::Strip(StripAction::Update(id))
+        if let Some(id) = self.instrument_id {
+            Action::Instrument(InstrumentAction::Update(id))
         } else {
             Action::None
         }
@@ -399,9 +399,9 @@ fn render_slider(value: f32, min: f32, max: f32, width: usize) -> String {
     s
 }
 
-impl Pane for StripEditPane {
+impl Pane for InstrumentEditPane {
     fn id(&self) -> &'static str {
-        "strip_edit"
+        "instrument_edit"
     }
 
     fn handle_input(&mut self, event: InputEvent, _state: &AppState) -> Action {
@@ -470,7 +470,7 @@ impl Pane for StripEditPane {
                 KeyCode::Char(c) => {
                     if let Some(pitch) = self.piano.key_to_pitch(c) {
                         let velocity = if event.modifiers.shift { 127 } else { 100 };
-                        return Action::Strip(StripAction::PlayNote(pitch, velocity));
+                        return Action::Instrument(InstrumentAction::PlayNote(pitch, velocity));
                     }
                     return Action::None;
                 }
@@ -684,7 +684,7 @@ impl Pane for StripEditPane {
         let box_height = 29;
         let rect = Rect::centered(width, height, box_width, box_height);
 
-        let title = format!(" Edit: {} ({}) ", self.strip_name, self.source.name());
+        let title = format!(" Edit: {} ({}) ", self.instrument_name, self.source.name());
         g.set_style(Style::new().fg(Color::ORANGE));
         g.draw_box(rect, Some(&title));
 
@@ -943,7 +943,7 @@ impl Pane for StripEditPane {
     }
 }
 
-impl Default for StripEditPane {
+impl Default for InstrumentEditPane {
     fn default() -> Self {
         Self::new()
     }

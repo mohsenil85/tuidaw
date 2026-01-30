@@ -57,7 +57,7 @@ impl Pane for SequencerPane {
     }
 
     fn handle_input(&mut self, event: InputEvent, state: &AppState) -> Action {
-        let seq = match state.strip.selected_drum_sequencer() {
+        let seq = match state.instruments.selected_drum_sequencer() {
             Some(s) => s,
             None => return Action::None,
         };
@@ -136,7 +136,7 @@ impl Pane for SequencerPane {
         let box_height: u16 = 29;
         let rect = Rect::centered(width, height, box_width, box_height);
 
-        let seq = match state.strip.selected_drum_sequencer() {
+        let seq = match state.instruments.selected_drum_sequencer() {
             Some(s) => s,
             None => {
                 g.set_style(Style::new().fg(Color::ORANGE));

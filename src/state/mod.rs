@@ -1,6 +1,8 @@
 pub mod automation;
 pub mod custom_synthdef;
 pub mod drum_sequencer;
+pub mod instrument;
+pub mod instrument_state;
 pub mod midi_recording;
 pub mod music;
 pub mod param;
@@ -8,21 +10,19 @@ pub mod persistence;
 pub mod piano_roll;
 pub mod sampler;
 pub mod session;
-pub mod strip;
-pub mod strip_state;
 
 pub use automation::AutomationTarget;
 pub use custom_synthdef::{CustomSynthDef, CustomSynthDefRegistry, ParamSpec};
+pub use instrument::*;
+pub use instrument_state::InstrumentState;
 pub use param::{Param, ParamValue};
 pub use sampler::BufferId;
 pub use session::{MixerSelection, MusicalSettings, SessionState, MAX_BUSES};
-pub use strip::*;
-pub use strip_state::StripState;
 
 /// Top-level application state, owned by main.rs and passed to panes by reference.
 pub struct AppState {
     pub session: SessionState,
-    pub strip: StripState,
+    pub instruments: InstrumentState,
     pub audio_in_waveform: Option<Vec<f32>>,
 }
 
@@ -30,21 +30,21 @@ impl AppState {
     pub fn new() -> Self {
         Self {
             session: SessionState::new(),
-            strip: StripState::new(),
+            instruments: InstrumentState::new(),
             audio_in_waveform: None,
         }
     }
 
-    /// Add a strip, with custom synthdef param setup and piano roll track auto-creation.
-    pub fn add_strip(&mut self, source: OscType) -> StripId {
-        let id = self.strip.add_strip(source);
+    /// Add an instrument, with custom synthdef param setup and piano roll track auto-creation.
+    pub fn add_instrument(&mut self, source: OscType) -> InstrumentId {
+        let id = self.instruments.add_instrument(source);
 
         // For custom synthdefs, set params from registry
         if let OscType::Custom(custom_id) = source {
             if let Some(synthdef) = self.session.custom_synthdefs.get(custom_id) {
-                if let Some(strip) = self.strip.strip_mut(id) {
-                    strip.name = format!("{}-{}", synthdef.synthdef_name, id);
-                    strip.source_params = synthdef
+                if let Some(inst) = self.instruments.instrument_mut(id) {
+                    inst.name = format!("{}-{}", synthdef.synthdef_name, id);
+                    inst.source_params = synthdef
                         .params
                         .iter()
                         .map(|p| param::Param {
@@ -58,40 +58,40 @@ impl AppState {
             }
         }
 
-        // Auto-add piano roll track if strip has_track
-        if self.strip.strip(id).map_or(false, |s| s.has_track) {
+        // Auto-add piano roll track if instrument has_track
+        if self.instruments.instrument(id).map_or(false, |s| s.has_track) {
             self.session.piano_roll.add_track(id);
         }
 
         id
     }
 
-    /// Remove a strip and its piano roll track.
-    pub fn remove_strip(&mut self, id: StripId) {
-        self.strip.remove_strip(id);
+    /// Remove an instrument and its piano roll track.
+    pub fn remove_instrument(&mut self, id: InstrumentId) {
+        self.instruments.remove_instrument(id);
         self.session.piano_roll.remove_track(id);
     }
 
-    /// Compute effective mute for a strip, considering solo state and master mute.
-    pub fn effective_strip_mute(&self, strip: &Strip) -> bool {
-        if self.strip.any_strip_solo() {
-            !strip.solo
+    /// Compute effective mute for an instrument, considering solo state and master mute.
+    pub fn effective_instrument_mute(&self, inst: &Instrument) -> bool {
+        if self.instruments.any_instrument_solo() {
+            !inst.solo
         } else {
-            strip.mute || self.session.master_mute
+            inst.mute || self.session.master_mute
         }
     }
 
-    /// Collect mixer updates for all strips (strip_id, level, mute)
+    /// Collect mixer updates for all instruments (instrument_id, level, mute)
     #[allow(dead_code)]
-    pub fn collect_strip_updates(&self) -> Vec<(StripId, f32, bool)> {
-        self.strip
-            .strips
+    pub fn collect_instrument_updates(&self) -> Vec<(InstrumentId, f32, bool)> {
+        self.instruments
+            .instruments
             .iter()
             .map(|s| {
                 (
                     s.id,
                     s.level * self.session.master_level,
-                    self.effective_strip_mute(s),
+                    self.effective_instrument_mute(s),
                 )
             })
             .collect()
@@ -100,11 +100,11 @@ impl AppState {
     /// Move mixer selection left/right
     pub fn mixer_move(&mut self, delta: i8) {
         self.session.mixer_selection = match self.session.mixer_selection {
-            MixerSelection::Strip(idx) => {
+            MixerSelection::Instrument(idx) => {
                 let new_idx = (idx as i32 + delta as i32)
-                    .clamp(0, self.strip.strips.len().saturating_sub(1) as i32)
+                    .clamp(0, self.instruments.instruments.len().saturating_sub(1) as i32)
                     as usize;
-                MixerSelection::Strip(new_idx)
+                MixerSelection::Instrument(new_idx)
             }
             MixerSelection::Bus(id) => {
                 let new_id = (id as i8 + delta).clamp(1, MAX_BUSES as i8) as u8;
@@ -117,11 +117,11 @@ impl AppState {
     /// Jump to first (1) or last (-1) in current section
     pub fn mixer_jump(&mut self, direction: i8) {
         self.session.mixer_selection = match self.session.mixer_selection {
-            MixerSelection::Strip(_) => {
+            MixerSelection::Instrument(_) => {
                 if direction > 0 {
-                    MixerSelection::Strip(0)
+                    MixerSelection::Instrument(0)
                 } else {
-                    MixerSelection::Strip(self.strip.strips.len().saturating_sub(1))
+                    MixerSelection::Instrument(self.instruments.instruments.len().saturating_sub(1))
                 }
             }
             MixerSelection::Bus(_) => {
@@ -135,11 +135,11 @@ impl AppState {
         };
     }
 
-    /// Cycle output target for the selected strip
+    /// Cycle output target for the selected instrument
     pub fn mixer_cycle_output(&mut self) {
-        if let MixerSelection::Strip(idx) = self.session.mixer_selection {
-            if let Some(strip) = self.strip.strips.get_mut(idx) {
-                strip.output_target = match strip.output_target {
+        if let MixerSelection::Instrument(idx) = self.session.mixer_selection {
+            if let Some(inst) = self.instruments.instruments.get_mut(idx) {
+                inst.output_target = match inst.output_target {
                     OutputTarget::Master => OutputTarget::Bus(1),
                     OutputTarget::Bus(n) if n < MAX_BUSES as u8 => OutputTarget::Bus(n + 1),
                     OutputTarget::Bus(_) => OutputTarget::Master,
@@ -148,11 +148,11 @@ impl AppState {
         }
     }
 
-    /// Cycle output target backwards for the selected strip
+    /// Cycle output target backwards for the selected instrument
     pub fn mixer_cycle_output_reverse(&mut self) {
-        if let MixerSelection::Strip(idx) = self.session.mixer_selection {
-            if let Some(strip) = self.strip.strips.get_mut(idx) {
-                strip.output_target = match strip.output_target {
+        if let MixerSelection::Instrument(idx) = self.session.mixer_selection {
+            if let Some(inst) = self.instruments.instruments.get_mut(idx) {
+                inst.output_target = match inst.output_target {
                     OutputTarget::Master => OutputTarget::Bus(MAX_BUSES as u8),
                     OutputTarget::Bus(1) => OutputTarget::Master,
                     OutputTarget::Bus(n) => OutputTarget::Bus(n - 1),

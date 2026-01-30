@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use super::strip::StripId;
+use super::instrument::InstrumentId;
 
 pub type AutomationLaneId = u32;
 
@@ -55,28 +55,28 @@ impl AutomationPoint {
 /// What parameter is being automated
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum AutomationTarget {
-    /// Strip output level
-    StripLevel(StripId),
-    /// Strip pan
-    StripPan(StripId),
+    /// Instrument output level
+    InstrumentLevel(InstrumentId),
+    /// Instrument pan
+    InstrumentPan(InstrumentId),
     /// Filter cutoff frequency
-    FilterCutoff(StripId),
+    FilterCutoff(InstrumentId),
     /// Filter resonance
-    FilterResonance(StripId),
-    /// Effect parameter (strip_id, effect_index, param_index)
-    EffectParam(StripId, usize, usize),
+    FilterResonance(InstrumentId),
+    /// Effect parameter (instrument_id, effect_index, param_index)
+    EffectParam(InstrumentId, usize, usize),
     /// Sampler playback rate (for scratching)
-    SamplerRate(StripId),
+    SamplerRate(InstrumentId),
     /// Sampler amplitude
-    SamplerAmp(StripId),
+    SamplerAmp(InstrumentId),
 }
 
 impl AutomationTarget {
-    /// Get the strip ID associated with this target
-    pub fn strip_id(&self) -> StripId {
+    /// Get the instrument ID associated with this target
+    pub fn instrument_id(&self) -> InstrumentId {
         match self {
-            AutomationTarget::StripLevel(id) => *id,
-            AutomationTarget::StripPan(id) => *id,
+            AutomationTarget::InstrumentLevel(id) => *id,
+            AutomationTarget::InstrumentPan(id) => *id,
             AutomationTarget::FilterCutoff(id) => *id,
             AutomationTarget::FilterResonance(id) => *id,
             AutomationTarget::EffectParam(id, _, _) => *id,
@@ -88,8 +88,8 @@ impl AutomationTarget {
     /// Get a human-readable name for this target
     pub fn name(&self) -> String {
         match self {
-            AutomationTarget::StripLevel(_) => "Level".to_string(),
-            AutomationTarget::StripPan(_) => "Pan".to_string(),
+            AutomationTarget::InstrumentLevel(_) => "Level".to_string(),
+            AutomationTarget::InstrumentPan(_) => "Pan".to_string(),
             AutomationTarget::FilterCutoff(_) => "Filter Cutoff".to_string(),
             AutomationTarget::FilterResonance(_) => "Filter Resonance".to_string(),
             AutomationTarget::EffectParam(_, fx_idx, param_idx) => {
@@ -103,8 +103,8 @@ impl AutomationTarget {
     /// Get the default min/max range for this target type
     pub fn default_range(&self) -> (f32, f32) {
         match self {
-            AutomationTarget::StripLevel(_) => (0.0, 1.0),
-            AutomationTarget::StripPan(_) => (-1.0, 1.0),
+            AutomationTarget::InstrumentLevel(_) => (0.0, 1.0),
+            AutomationTarget::InstrumentPan(_) => (-1.0, 1.0),
             AutomationTarget::FilterCutoff(_) => (20.0, 20000.0),
             AutomationTarget::FilterResonance(_) => (0.0, 1.0),
             AutomationTarget::EffectParam(_, _, _) => (0.0, 1.0),
@@ -300,9 +300,9 @@ impl AutomationState {
         self.lanes.iter_mut().find(|l| &l.target == target)
     }
 
-    /// Get all lanes for a specific strip
-    pub fn lanes_for_strip(&self, strip_id: StripId) -> Vec<&AutomationLane> {
-        self.lanes.iter().filter(|l| l.target.strip_id() == strip_id).collect()
+    /// Get all lanes for a specific instrument
+    pub fn lanes_for_instrument(&self, instrument_id: InstrumentId) -> Vec<&AutomationLane> {
+        self.lanes.iter().filter(|l| l.target.instrument_id() == instrument_id).collect()
     }
 
     /// Selected lane
@@ -341,9 +341,9 @@ impl AutomationState {
         };
     }
 
-    /// Remove all lanes for a strip (when strip is deleted)
-    pub fn remove_lanes_for_strip(&mut self, strip_id: StripId) {
-        self.lanes.retain(|l| l.target.strip_id() != strip_id);
+    /// Remove all lanes for an instrument (when instrument is deleted)
+    pub fn remove_lanes_for_instrument(&mut self, instrument_id: InstrumentId) {
+        self.lanes.retain(|l| l.target.instrument_id() != instrument_id);
         // Adjust selection
         if let Some(sel) = self.selected_lane {
             if sel >= self.lanes.len() {
@@ -370,7 +370,7 @@ mod tests {
 
     #[test]
     fn test_automation_lane_interpolation() {
-        let mut lane = AutomationLane::new(0, AutomationTarget::StripLevel(0));
+        let mut lane = AutomationLane::new(0, AutomationTarget::InstrumentLevel(0));
 
         // Add points
         lane.add_point(0, 0.0);
@@ -387,7 +387,7 @@ mod tests {
 
     #[test]
     fn test_automation_lane_step_curve() {
-        let mut lane = AutomationLane::new(0, AutomationTarget::StripLevel(0));
+        let mut lane = AutomationLane::new(0, AutomationTarget::InstrumentLevel(0));
 
         lane.points.push(AutomationPoint::with_curve(0, 0.0, CurveType::Step));
         lane.points.push(AutomationPoint::with_curve(100, 1.0, CurveType::Step));
@@ -400,13 +400,13 @@ mod tests {
     fn test_automation_state() {
         let mut state = AutomationState::new();
 
-        let id1 = state.add_lane(AutomationTarget::StripLevel(0));
-        let id2 = state.add_lane(AutomationTarget::StripPan(0));
+        let id1 = state.add_lane(AutomationTarget::InstrumentLevel(0));
+        let id2 = state.add_lane(AutomationTarget::InstrumentPan(0));
 
         assert_eq!(state.lanes.len(), 2);
 
         // Adding same target should return existing ID
-        let id1_again = state.add_lane(AutomationTarget::StripLevel(0));
+        let id1_again = state.add_lane(AutomationTarget::InstrumentLevel(0));
         assert_eq!(id1, id1_again);
         assert_eq!(state.lanes.len(), 2);
 

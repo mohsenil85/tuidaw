@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
 use super::automation::AutomationTarget;
-use super::strip::StripId;
+use super::instrument::InstrumentId;
 
 /// Recording mode for MIDI automation
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -74,7 +74,7 @@ pub struct PitchBendConfig {
 }
 
 impl PitchBendConfig {
-    pub fn new_for_sampler(strip_id: StripId) -> Self {
+    pub fn new_for_sampler(strip_id: InstrumentId) -> Self {
         Self {
             target: AutomationTarget::SamplerRate(strip_id),
             center_value: 1.0, // Normal playback speed
@@ -100,7 +100,7 @@ pub struct MidiRecordingState {
     /// Pitch bend configurations per strip
     pub pitch_bend_configs: Vec<PitchBendConfig>,
     /// Currently selected strip for live MIDI input
-    pub live_input_strip: Option<StripId>,
+    pub live_input_strip: Option<InstrumentId>,
     /// Whether to pass-through MIDI notes to audio engine
     pub note_passthrough: bool,
     /// MIDI channel filter (None = all channels)
@@ -146,14 +146,14 @@ impl MidiRecordingState {
     /// Add pitch bend config for a strip
     pub fn add_pitch_bend_config(&mut self, config: PitchBendConfig) {
         // Remove existing config for same target strip
-        let strip_id = config.target.strip_id();
-        self.pitch_bend_configs.retain(|c| c.target.strip_id() != strip_id);
+        let strip_id = config.target.instrument_id();
+        self.pitch_bend_configs.retain(|c| c.target.instrument_id() != strip_id);
         self.pitch_bend_configs.push(config);
     }
 
     /// Find pitch bend config for a strip
-    pub fn find_pitch_bend_config(&self, strip_id: StripId) -> Option<&PitchBendConfig> {
-        self.pitch_bend_configs.iter().find(|c| c.target.strip_id() == strip_id)
+    pub fn find_pitch_bend_config(&self, strip_id: InstrumentId) -> Option<&PitchBendConfig> {
+        self.pitch_bend_configs.iter().find(|c| c.target.instrument_id() == strip_id)
     }
 
     /// Arm for recording
@@ -184,7 +184,7 @@ impl MidiRecordingState {
     }
 
     /// Set the strip for live MIDI input
-    pub fn set_live_input_strip(&mut self, strip_id: Option<StripId>) {
+    pub fn set_live_input_strip(&mut self, strip_id: Option<InstrumentId>) {
         self.live_input_strip = strip_id;
     }
 

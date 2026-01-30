@@ -2,7 +2,7 @@ use std::any::Any;
 use std::path::PathBuf;
 
 use super::{Graphics, InputEvent, Keymap};
-use crate::state::{AppState, EffectType, FilterType, MusicalSettings, OscType, StripId};
+use crate::state::{AppState, EffectType, FilterType, InstrumentId, MusicalSettings, OscType};
 
 /// Drum sequencer actions
 #[derive(Debug, Clone, PartialEq)]
@@ -29,25 +29,25 @@ pub enum NavAction {
     PopPane,
 }
 
-/// Strip/instrument actions
+/// Instrument actions
 #[derive(Debug, Clone, PartialEq)]
-pub enum StripAction {
+pub enum InstrumentAction {
     Add(OscType),
-    Delete(StripId),
-    Edit(StripId),
-    Update(StripId),
+    Delete(InstrumentId),
+    Edit(InstrumentId),
+    Update(InstrumentId),
     #[allow(dead_code)]
-    SetParam(StripId, String, f32),
+    SetParam(InstrumentId, String, f32),
     #[allow(dead_code)]
-    AddEffect(StripId, EffectType),
+    AddEffect(InstrumentId, EffectType),
     #[allow(dead_code)]
-    RemoveEffect(StripId, usize),
+    RemoveEffect(InstrumentId, usize),
     #[allow(dead_code)]
-    MoveEffect(StripId, usize, i8),
+    MoveEffect(InstrumentId, usize, i8),
     #[allow(dead_code)]
-    SetFilter(StripId, Option<FilterType>),
+    SetFilter(InstrumentId, Option<FilterType>),
     #[allow(dead_code)]
-    ToggleTrack(StripId),
+    ToggleTrack(InstrumentId),
     PlayNote(u8, u8),
     SelectNext,
     SelectPrev,
@@ -124,7 +124,7 @@ pub enum Action {
     None,
     Quit,
     Nav(NavAction),
-    Strip(StripAction),
+    Instrument(InstrumentAction),
     Mixer(MixerAction),
     PianoRoll(PianoRollAction),
     Server(ServerAction),

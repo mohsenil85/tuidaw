@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use super::strip::StripId;
+use super::instrument::InstrumentId;
 
 #[derive(Debug, Clone)]
 pub struct Note {
@@ -12,15 +12,15 @@ pub struct Note {
 
 #[derive(Debug, Clone)]
 pub struct Track {
-    pub module_id: StripId,
+    pub module_id: InstrumentId,
     pub notes: Vec<Note>,
     pub polyphonic: bool,
 }
 
 #[derive(Debug, Clone)]
 pub struct PianoRollState {
-    pub tracks: HashMap<StripId, Track>,
-    pub track_order: Vec<StripId>,
+    pub tracks: HashMap<InstrumentId, Track>,
+    pub track_order: Vec<InstrumentId>,
     pub bpm: f32,
     pub time_signature: (u8, u8),
     pub playing: bool,
@@ -47,23 +47,23 @@ impl PianoRollState {
         }
     }
 
-    pub fn add_track(&mut self, strip_id: StripId) {
-        if !self.tracks.contains_key(&strip_id) {
+    pub fn add_track(&mut self, instrument_id: InstrumentId) {
+        if !self.tracks.contains_key(&instrument_id) {
             self.tracks.insert(
-                strip_id,
+                instrument_id,
                 Track {
-                    module_id: strip_id,
+                    module_id: instrument_id,
                     notes: Vec::new(),
                     polyphonic: true,
                 },
             );
-            self.track_order.push(strip_id);
+            self.track_order.push(instrument_id);
         }
     }
 
-    pub fn remove_track(&mut self, strip_id: StripId) {
-        self.tracks.remove(&strip_id);
-        self.track_order.retain(|&id| id != strip_id);
+    pub fn remove_track(&mut self, instrument_id: InstrumentId) {
+        self.tracks.remove(&instrument_id);
+        self.track_order.retain(|&id| id != instrument_id);
     }
 
     /// Get the track at the given index in track_order

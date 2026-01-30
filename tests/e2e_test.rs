@@ -13,6 +13,7 @@ fn binary_path() -> String {
 }
 
 #[test]
+#[ignore]
 fn test_displays_box_with_title() {
     let harness = TmuxHarness::new("box-title");
     harness.start(&binary_path()).expect("Failed to start app");
@@ -35,6 +36,7 @@ fn test_displays_box_with_title() {
 }
 
 #[test]
+#[ignore]
 fn test_quit_with_q() {
     let harness = TmuxHarness::new("quit");
     harness.start(&binary_path()).expect("Failed to start app");

@@ -3,20 +3,20 @@ use super::custom_synthdef::CustomSynthDefRegistry;
 use super::midi_recording::MidiRecordingState;
 use super::music::{Key, Scale};
 use super::piano_roll::PianoRollState;
-use super::strip::MixerBus;
+use super::instrument::MixerBus;
 
 pub const MAX_BUSES: usize = 8;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MixerSelection {
-    Strip(usize), // index into strips vec
+    Instrument(usize), // index into instruments vec
     Bus(u8),      // 1-8
     Master,
 }
 
 impl Default for MixerSelection {
     fn default() -> Self {
-        Self::Strip(0)
+        Self::Instrument(0)
     }
 }
 
@@ -132,12 +132,12 @@ impl SessionState {
         }
     }
 
-    /// Cycle between strip/bus/master sections
+    /// Cycle between instrument/bus/master sections
     pub fn mixer_cycle_section(&mut self) {
         self.mixer_selection = match self.mixer_selection {
-            MixerSelection::Strip(_) => MixerSelection::Bus(1),
+            MixerSelection::Instrument(_) => MixerSelection::Bus(1),
             MixerSelection::Bus(_) => MixerSelection::Master,
-            MixerSelection::Master => MixerSelection::Strip(0),
+            MixerSelection::Master => MixerSelection::Instrument(0),
         };
     }
 }

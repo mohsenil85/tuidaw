@@ -67,7 +67,7 @@ pub fn tick_playback(
                 };
                 let offset = ticks_from_now * secs_per_tick;
                 let vel_f = velocity as f32 / 127.0;
-                let _ = audio_engine.spawn_voice(strip_id, pitch, vel_f, offset, &state.strip, &state.session);
+                let _ = audio_engine.spawn_voice(strip_id, pitch, vel_f, offset, &state.instruments, &state.session);
                 active_notes.push((strip_id, pitch, duration));
             }
 
@@ -77,7 +77,7 @@ pub fn tick_playback(
                     continue;
                 }
                 if let Some(value) = lane.value_at(new_playhead) {
-                    let _ = audio_engine.apply_automation(&lane.target, value, &state.strip, &state.session);
+                    let _ = audio_engine.apply_automation(&lane.target, value, &state.instruments, &state.session);
                 }
             }
         }
@@ -97,7 +97,7 @@ pub fn tick_playback(
         if audio_engine.is_running() {
             for (strip_id, pitch, remaining) in &note_offs {
                 let offset = *remaining as f64 * secs_per_tick;
-                let _ = audio_engine.release_voice(*strip_id, *pitch, offset, &state.strip);
+                let _ = audio_engine.release_voice(*strip_id, *pitch, offset, &state.instruments);
             }
         }
     }
@@ -111,7 +111,7 @@ pub fn tick_drum_sequencer(
 ) {
     let bpm = state.session.piano_roll.bpm;
 
-    for strip in &mut state.strip.strips {
+    for strip in &mut state.instruments.instruments {
         let seq = match &mut strip.drum_sequencer {
             Some(s) => s,
             None => continue,
@@ -143,7 +143,7 @@ pub fn tick_drum_sequencer(
                         {
                             if step.active {
                                 let amp = (step.velocity as f32 / 127.0) * pad.level;
-                                let _ = audio_engine.play_drum_hit_to_strip(
+                                let _ = audio_engine.play_drum_hit_to_instrument(
                                     buffer_id, amp, strip.id,
                                 );
                             }

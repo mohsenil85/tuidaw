@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 
 use super::bus_allocator::BusAllocator;
 use super::osc_client::OscClient;
-use crate::state::{AutomationTarget, BufferId, CustomSynthDefRegistry, EffectType, FilterType, OscType, ParamValue, SessionState, StripId, StripState};
+use crate::state::{AutomationTarget, BufferId, CustomSynthDefRegistry, EffectType, FilterType, OscType, ParamValue, SessionState, InstrumentId, InstrumentState};
 
 #[allow(dead_code)]
 pub type ModuleId = u32;
@@ -27,13 +27,13 @@ pub enum ServerStatus {
     Error,
 }
 
-/// Maximum simultaneous voices per strip
-const MAX_VOICES_PER_STRIP: usize = 16;
+/// Maximum simultaneous voices per instrument
+const MAX_VOICES_PER_INSTRUMENT: usize = 16;
 
 /// A polyphonic voice chain: entire signal chain spawned per note
 #[derive(Debug, Clone)]
 pub struct VoiceChain {
-    pub strip_id: StripId,
+    pub instrument_id: InstrumentId,
     pub pitch: u8,
     pub group_id: i32,
     pub midi_node_id: i32,
@@ -42,7 +42,7 @@ pub struct VoiceChain {
 }
 
 #[derive(Debug, Clone)]
-pub struct StripNodes {
+pub struct InstrumentNodes {
     pub source: Option<i32>,
     pub lfo: Option<i32>,
     pub filter: Option<i32>,
@@ -50,7 +50,7 @@ pub struct StripNodes {
     pub output: i32,
 }
 
-impl StripNodes {
+impl InstrumentNodes {
     pub fn all_node_ids(&self) -> Vec<i32> {
         let mut ids = Vec::new();
         if let Some(id) = self.source { ids.push(id); }
@@ -64,7 +64,7 @@ impl StripNodes {
 
 pub struct AudioEngine {
     client: Option<OscClient>,
-    node_map: HashMap<StripId, StripNodes>,
+    node_map: HashMap<InstrumentId, InstrumentNodes>,
     next_node_id: i32,
     is_running: bool,
     scsynth_process: Option<Child>,
@@ -75,7 +75,7 @@ pub struct AudioEngine {
     groups_created: bool,
     /// Dedicated audio bus per mixer bus (bus_id -> SC audio bus index)
     bus_audio_buses: HashMap<u8, i32>,
-    /// Send synth nodes: (strip_index, bus_id) -> node_id
+    /// Send synth nodes: (instrument_index, bus_id) -> node_id
     send_node_map: HashMap<(usize, u8), i32>,
     /// Bus output synth nodes: bus_id -> node_id
     bus_node_map: HashMap<u8, i32>,
@@ -347,7 +347,7 @@ impl AudioEngine {
     /// 2. Optional filter synth
     /// 3. Effect synths in order
     /// 4. Output synth with level/pan/mute
-    pub fn rebuild_strip_routing(&mut self, state: &StripState, session: &SessionState) -> Result<(), String> {
+    pub fn rebuild_instrument_routing(&mut self, state: &InstrumentState, session: &SessionState) -> Result<(), String> {
         if !self.is_running {
             return Ok(());
         }
@@ -381,7 +381,7 @@ impl AudioEngine {
         // We don't create static source synths for polyphonic strips (voices are spawned dynamically)
         // But we still need the output synth for summing voice output
 
-        for strip in &state.strips {
+        for strip in &state.instruments {
             let mut source_node: Option<i32> = None;
             let mut lfo_node: Option<i32> = None;
             let mut filter_node: Option<i32> = None;
@@ -524,7 +524,7 @@ impl AudioEngine {
             {
                 let node_id = self.next_node_id;
                 self.next_node_id += 1;
-                let any_solo = state.any_strip_solo();
+                let any_solo = state.any_instrument_solo();
                 let mute = if any_solo { !strip.solo } else { strip.mute || session.master_mute };
                 let params = vec![
                     ("in".to_string(), current_bus as f32),
@@ -544,7 +544,7 @@ impl AudioEngine {
                 output_node_id = node_id;
             }
 
-            self.node_map.insert(strip.id, StripNodes {
+            self.node_map.insert(strip.id, InstrumentNodes {
                 source: source_node,
                 lfo: lfo_node,
                 filter: filter_node,
@@ -567,7 +567,7 @@ impl AudioEngine {
         }
 
         // Create send synths
-        for (strip_idx, strip) in state.strips.iter().enumerate() {
+        for (instrument_idx, strip) in state.instruments.iter().enumerate() {
             // Get the strip's source_out bus (where voices sum into)
             let strip_audio_bus = self.bus_allocator.get_audio_bus(strip.id, "source_out").unwrap_or(16);
 
@@ -588,7 +588,7 @@ impl AudioEngine {
                             .create_synth_in_group("tuidaw_send", node_id, GROUP_OUTPUT, &params)
                             .map_err(|e| e.to_string())?;
                     }
-                    self.send_node_map.insert((strip_idx, send.bus_id), node_id);
+                    self.send_node_map.insert((instrument_idx, send.bus_id), node_id);
                 }
             }
         }
@@ -633,11 +633,11 @@ impl AudioEngine {
     }
 
     /// Update all strip output mixer params (level, mute, pan) in real-time without rebuilding the graph
-    pub fn update_all_strip_mixer_params(&self, state: &StripState, session: &SessionState) -> Result<(), String> {
+    pub fn update_all_instrument_mixer_params(&self, state: &InstrumentState, session: &SessionState) -> Result<(), String> {
         if !self.is_running { return Ok(()); }
         let client = self.client.as_ref().ok_or("Not connected")?;
-        let any_solo = state.any_strip_solo();
-        for strip in &state.strips {
+        let any_solo = state.any_instrument_solo();
+        for strip in &state.instruments {
             if let Some(nodes) = self.node_map.get(&strip.id) {
                 let mute = strip.mute || session.master_mute || (any_solo && !strip.solo);
                 client.set_param(nodes.output, "level", strip.level * session.master_level)
@@ -653,12 +653,12 @@ impl AudioEngine {
 
     /// Set a source parameter on a strip in real-time.
     /// Updates the persistent source node (AudioIn) and all active voice source nodes.
-    pub fn set_source_param(&self, strip_id: StripId, param: &str, value: f32) -> Result<(), String> {
+    pub fn set_source_param(&self, instrument_id: InstrumentId, param: &str, value: f32) -> Result<(), String> {
         if !self.is_running { return Ok(()); }
         let client = self.client.as_ref().ok_or("Not connected")?;
 
         // Set on persistent source node (AudioIn strips)
-        if let Some(nodes) = self.node_map.get(&strip_id) {
+        if let Some(nodes) = self.node_map.get(&instrument_id) {
             if let Some(source_node) = nodes.source {
                 let _ = client.set_param(source_node, param, value);
             }
@@ -666,7 +666,7 @@ impl AudioEngine {
 
         // Set on all active voice source nodes (oscillator/sampler strips)
         for voice in &self.voice_chains {
-            if voice.strip_id == strip_id {
+            if voice.instrument_id == instrument_id {
                 let _ = client.set_param(voice.source_node, param, value);
             }
         }
@@ -677,15 +677,15 @@ impl AudioEngine {
     /// Spawn a voice for a strip
     pub fn spawn_voice(
         &mut self,
-        strip_id: StripId,
+        instrument_id: InstrumentId,
         pitch: u8,
         velocity: f32,
         offset_secs: f64,
-        state: &StripState,
+        state: &InstrumentState,
         session: &SessionState,
     ) -> Result<(), String> {
-        let strip = state.strip(strip_id)
-            .ok_or_else(|| format!("No strip with id {}", strip_id))?;
+        let strip = state.instrument(instrument_id)
+            .ok_or_else(|| format!("No strip with id {}", instrument_id))?;
 
         // AudioIn strips don't use voice spawning - they have a persistent synth
         if strip.source.is_audio_input() {
@@ -694,17 +694,17 @@ impl AudioEngine {
 
         // Sampler strips need special handling
         if strip.source.is_sampler() {
-            return self.spawn_sampler_voice(strip_id, pitch, velocity, offset_secs, state);
+            return self.spawn_sampler_voice(instrument_id, pitch, velocity, offset_secs, state);
         }
 
         let client = self.client.as_ref().ok_or("Not connected")?;
 
         // Voice-steal: if at limit, free oldest by spawn_time
-        let count = self.voice_chains.iter().filter(|v| v.strip_id == strip_id).count();
-        if count >= MAX_VOICES_PER_STRIP {
+        let count = self.voice_chains.iter().filter(|v| v.instrument_id == instrument_id).count();
+        if count >= MAX_VOICES_PER_INSTRUMENT {
             if let Some(pos) = self.voice_chains.iter()
                 .enumerate()
-                .filter(|(_, v)| v.strip_id == strip_id)
+                .filter(|(_, v)| v.instrument_id == instrument_id)
                 .min_by_key(|(_, v)| v.spawn_time)
                 .map(|(i, _)| i)
             {
@@ -714,7 +714,7 @@ impl AudioEngine {
         }
 
         // Get the audio bus where voices should write their output
-        let source_out_bus = self.bus_allocator.get_audio_bus(strip_id, "source_out").unwrap_or(16);
+        let source_out_bus = self.bus_allocator.get_audio_bus(instrument_id, "source_out").unwrap_or(16);
 
         // Create a group for this voice chain
         let group_id = self.next_node_id;
@@ -822,7 +822,7 @@ impl AudioEngine {
             .map_err(|e| e.to_string())?;
 
         self.voice_chains.push(VoiceChain {
-            strip_id,
+            instrument_id,
             pitch,
             group_id,
             midi_node_id,
@@ -836,14 +836,14 @@ impl AudioEngine {
     /// Spawn a sampler voice (separate method for sampler-specific handling)
     fn spawn_sampler_voice(
         &mut self,
-        strip_id: StripId,
+        instrument_id: InstrumentId,
         pitch: u8,
         velocity: f32,
         offset_secs: f64,
-        state: &StripState,
+        state: &InstrumentState,
     ) -> Result<(), String> {
-        let strip = state.strip(strip_id)
-            .ok_or_else(|| format!("No strip with id {}", strip_id))?;
+        let strip = state.instrument(instrument_id)
+            .ok_or_else(|| format!("No strip with id {}", instrument_id))?;
 
         let sampler_config = strip.sampler_config.as_ref()
             .ok_or("Sampler strip has no sampler config")?;
@@ -863,11 +863,11 @@ impl AudioEngine {
         let client = self.client.as_ref().ok_or("Not connected")?;
 
         // Voice-steal: if at limit, free oldest by spawn_time
-        let count = self.voice_chains.iter().filter(|v| v.strip_id == strip_id).count();
-        if count >= MAX_VOICES_PER_STRIP {
+        let count = self.voice_chains.iter().filter(|v| v.instrument_id == instrument_id).count();
+        if count >= MAX_VOICES_PER_INSTRUMENT {
             if let Some(pos) = self.voice_chains.iter()
                 .enumerate()
-                .filter(|(_, v)| v.strip_id == strip_id)
+                .filter(|(_, v)| v.instrument_id == instrument_id)
                 .min_by_key(|(_, v)| v.spawn_time)
                 .map(|(i, _)| i)
             {
@@ -877,7 +877,7 @@ impl AudioEngine {
         }
 
         // Get the audio bus where voices should write their output
-        let source_out_bus = self.bus_allocator.get_audio_bus(strip_id, "source_out").unwrap_or(16);
+        let source_out_bus = self.bus_allocator.get_audio_bus(instrument_id, "source_out").unwrap_or(16);
 
         // Create a group for this voice chain
         let group_id = self.next_node_id;
@@ -1015,7 +1015,7 @@ impl AudioEngine {
             .map_err(|e| e.to_string())?;
 
         self.voice_chains.push(VoiceChain {
-            strip_id,
+            instrument_id,
             pitch,
             group_id,
             midi_node_id,
@@ -1029,17 +1029,17 @@ impl AudioEngine {
     /// Release a specific voice by strip and pitch (note-off)
     pub fn release_voice(
         &mut self,
-        strip_id: StripId,
+        instrument_id: InstrumentId,
         pitch: u8,
         offset_secs: f64,
-        state: &StripState,
+        state: &InstrumentState,
     ) -> Result<(), String> {
         let client = self.client.as_ref().ok_or("Not connected")?;
 
         if let Some(pos) = self
             .voice_chains
             .iter()
-            .position(|v| v.strip_id == strip_id && v.pitch == pitch)
+            .position(|v| v.instrument_id == instrument_id && v.pitch == pitch)
         {
             let chain = self.voice_chains.remove(pos);
             let time = super::osc_client::osc_time_from_now(offset_secs);
@@ -1047,7 +1047,7 @@ impl AudioEngine {
                 .set_params_bundled(chain.midi_node_id, &[("gate", 0.0)], time)
                 .map_err(|e| e.to_string())?;
             // Schedule group free after envelope release completes (+1s margin)
-            let release_time = state.strip(strip_id)
+            let release_time = state.instrument(instrument_id)
                 .map(|s| s.amp_envelope.release)
                 .unwrap_or(1.0);
             let cleanup_time = super::osc_client::osc_time_from_now(
@@ -1076,17 +1076,17 @@ impl AudioEngine {
     }
 
     /// Play a one-shot drum sample routed through a strip's signal chain
-    pub fn play_drum_hit_to_strip(
+    pub fn play_drum_hit_to_instrument(
         &mut self,
         buffer_id: BufferId,
         amp: f32,
-        strip_id: StripId,
+        instrument_id: InstrumentId,
     ) -> Result<(), String> {
         let client = self.client.as_ref().ok_or("Not connected")?;
         let bufnum = *self.buffer_map.get(&buffer_id).ok_or("Buffer not loaded")?;
         let out_bus = self
             .bus_allocator
-            .get_audio_bus(strip_id, "source_out")
+            .get_audio_bus(instrument_id, "source_out")
             .unwrap_or(0);
 
         let node_id = self.next_node_id;
@@ -1125,10 +1125,10 @@ impl AudioEngine {
     }
 
     /// Get waveform data for an audio input strip
-    pub fn audio_in_waveform(&self, strip_id: u32) -> Vec<f32> {
+    pub fn audio_in_waveform(&self, instrument_id: u32) -> Vec<f32> {
         self.client
             .as_ref()
-            .map(|c| c.audio_in_waveform(strip_id))
+            .map(|c| c.audio_in_waveform(instrument_id))
             .unwrap_or_default()
     }
 
@@ -1213,45 +1213,45 @@ impl AudioEngine {
 
     /// Apply an automation value to a target parameter
     /// This updates the appropriate synth node in real-time
-    pub fn apply_automation(&self, target: &AutomationTarget, value: f32, state: &StripState, session: &SessionState) -> Result<(), String> {
+    pub fn apply_automation(&self, target: &AutomationTarget, value: f32, state: &InstrumentState, session: &SessionState) -> Result<(), String> {
         if !self.is_running {
             return Ok(());
         }
         let client = self.client.as_ref().ok_or("Not connected")?;
 
         match target {
-            AutomationTarget::StripLevel(strip_id) => {
-                if let Some(nodes) = self.node_map.get(strip_id) {
+            AutomationTarget::InstrumentLevel(instrument_id) => {
+                if let Some(nodes) = self.node_map.get(instrument_id) {
                     let effective_level = value * session.master_level;
                     client.set_param(nodes.output, "level", effective_level)
                         .map_err(|e| e.to_string())?;
                 }
             }
-            AutomationTarget::StripPan(strip_id) => {
-                if let Some(nodes) = self.node_map.get(strip_id) {
+            AutomationTarget::InstrumentPan(instrument_id) => {
+                if let Some(nodes) = self.node_map.get(instrument_id) {
                     client.set_param(nodes.output, "pan", value)
                         .map_err(|e| e.to_string())?;
                 }
             }
-            AutomationTarget::FilterCutoff(strip_id) => {
-                if let Some(nodes) = self.node_map.get(strip_id) {
+            AutomationTarget::FilterCutoff(instrument_id) => {
+                if let Some(nodes) = self.node_map.get(instrument_id) {
                     if let Some(filter_node) = nodes.filter {
                         client.set_param(filter_node, "cutoff", value)
                             .map_err(|e| e.to_string())?;
                     }
                 }
             }
-            AutomationTarget::FilterResonance(strip_id) => {
-                if let Some(nodes) = self.node_map.get(strip_id) {
+            AutomationTarget::FilterResonance(instrument_id) => {
+                if let Some(nodes) = self.node_map.get(instrument_id) {
                     if let Some(filter_node) = nodes.filter {
                         client.set_param(filter_node, "resonance", value)
                             .map_err(|e| e.to_string())?;
                     }
                 }
             }
-            AutomationTarget::EffectParam(strip_id, effect_idx, param_idx) => {
-                if let Some(nodes) = self.node_map.get(strip_id) {
-                    let strip = state.strip(*strip_id);
+            AutomationTarget::EffectParam(instrument_id, effect_idx, param_idx) => {
+                if let Some(nodes) = self.node_map.get(instrument_id) {
+                    let strip = state.instrument(*instrument_id);
                     if let Some(strip) = strip {
                         // Count enabled effects before effect_idx to find the right node
                         let enabled_idx = strip.effects.iter()
@@ -1269,17 +1269,17 @@ impl AudioEngine {
                     }
                 }
             }
-            AutomationTarget::SamplerRate(strip_id) => {
+            AutomationTarget::SamplerRate(instrument_id) => {
                 for voice in &self.voice_chains {
-                    if voice.strip_id == *strip_id {
+                    if voice.instrument_id == *instrument_id {
                         client.set_param(voice.source_node, "rate", value)
                             .map_err(|e| e.to_string())?;
                     }
                 }
             }
-            AutomationTarget::SamplerAmp(strip_id) => {
+            AutomationTarget::SamplerAmp(instrument_id) => {
                 for voice in &self.voice_chains {
-                    if voice.strip_id == *strip_id {
+                    if voice.instrument_id == *instrument_id {
                         client.set_param(voice.source_node, "amp", value)
                             .map_err(|e| e.to_string())?;
                     }
