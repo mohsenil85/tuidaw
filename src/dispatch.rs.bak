@@ -80,7 +80,7 @@ fn dispatch_instrument(
             // Apply edits from instrument_edit pane back to the instrument
             let edits = panes.get_pane_mut::<InstrumentEditPane>("instrument_edit")
                 .map(|edit| {
-                    let mut dummy = crate::state::instrument::Instrument::new(id, crate::state::SourceType::Saw);
+                    let mut dummy = crate::state::instrument::Instrument::new(id, crate::state::OscType::Saw);
                     edit.apply_to(&mut dummy);
                     dummy
                 });

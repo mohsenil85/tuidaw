@@ -6,7 +6,7 @@ use super::sampler::SamplerConfig;
 pub type InstrumentId = u32;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum OscType {
+pub enum SourceType {
     Saw,
     Sin,
     Sqr,
@@ -18,25 +18,25 @@ pub enum OscType {
     Custom(CustomSynthDefId),
 }
 
-impl OscType {
+impl SourceType {
     pub fn name(&self) -> &'static str {
         match self {
-            OscType::Saw => "Saw",
-            OscType::Sin => "Sine",
-            OscType::Sqr => "Square",
-            OscType::Tri => "Triangle",
-            OscType::AudioIn => "Audio In",
-            OscType::BusIn => "Bus In",
-            OscType::Sample => "Sample",
-            OscType::Kit => "Kit",
-            OscType::Custom(_) => "Custom",
+            SourceType::Saw => "Saw",
+            SourceType::Sin => "Sine",
+            SourceType::Sqr => "Square",
+            SourceType::Tri => "Triangle",
+            SourceType::AudioIn => "Audio In",
+            SourceType::BusIn => "Bus In",
+            SourceType::Sample => "Sample",
+            SourceType::Kit => "Kit",
+            SourceType::Custom(_) => "Custom",
         }
     }
 
     /// Get display name, with custom synthdef name lookup
     pub fn display_name(&self, registry: &CustomSynthDefRegistry) -> String {
         match self {
-            OscType::Custom(id) => registry
+            SourceType::Custom(id) => registry
                 .get(*id)
                 .map(|s| s.name.clone())
                 .unwrap_or_else(|| "Custom".to_string()),
@@ -46,22 +46,22 @@ impl OscType {
 
     pub fn short_name(&self) -> &'static str {
         match self {
-            OscType::Saw => "saw",
-            OscType::Sin => "sin",
-            OscType::Sqr => "sqr",
-            OscType::Tri => "tri",
-            OscType::AudioIn => "audio_in",
-            OscType::BusIn => "bus_in",
-            OscType::Sample => "sample",
-            OscType::Kit => "kit",
-            OscType::Custom(_) => "custom",
+            SourceType::Saw => "saw",
+            SourceType::Sin => "sin",
+            SourceType::Sqr => "sqr",
+            SourceType::Tri => "tri",
+            SourceType::AudioIn => "audio_in",
+            SourceType::BusIn => "bus_in",
+            SourceType::Sample => "sample",
+            SourceType::Kit => "kit",
+            SourceType::Custom(_) => "custom",
         }
     }
 
     /// Get short name with custom synthdef lookup
     pub fn short_name_with_registry(&self, registry: &CustomSynthDefRegistry) -> String {
         match self {
-            OscType::Custom(id) => registry
+            SourceType::Custom(id) => registry
                 .get(*id)
                 .map(|s| s.synthdef_name.clone())
                 .unwrap_or_else(|| "custom".to_string()),
@@ -72,22 +72,22 @@ impl OscType {
     /// Get the SuperCollider synthdef name (static for built-ins)
     pub fn synth_def_name(&self) -> &'static str {
         match self {
-            OscType::Saw => "tuidaw_saw",
-            OscType::Sin => "tuidaw_sin",
-            OscType::Sqr => "tuidaw_sqr",
-            OscType::Tri => "tuidaw_tri",
-            OscType::AudioIn => "tuidaw_audio_in",
-            OscType::BusIn => "tuidaw_bus_in",
-            OscType::Sample => "tuidaw_sampler",
-            OscType::Kit => "tuidaw_sampler_oneshot",
-            OscType::Custom(_) => "tuidaw_saw", // Fallback, use synth_def_name_with_registry instead
+            SourceType::Saw => "tuidaw_saw",
+            SourceType::Sin => "tuidaw_sin",
+            SourceType::Sqr => "tuidaw_sqr",
+            SourceType::Tri => "tuidaw_tri",
+            SourceType::AudioIn => "tuidaw_audio_in",
+            SourceType::BusIn => "tuidaw_bus_in",
+            SourceType::Sample => "tuidaw_sampler",
+            SourceType::Kit => "tuidaw_sampler_oneshot",
+            SourceType::Custom(_) => "tuidaw_saw", // Fallback, use synth_def_name_with_registry instead
         }
     }
 
     /// Get the SuperCollider synthdef name with custom synthdef lookup
     pub fn synth_def_name_with_registry(&self, registry: &CustomSynthDefRegistry) -> String {
         match self {
-            OscType::Custom(id) => registry
+            SourceType::Custom(id) => registry
                 .get(*id)
                 .map(|s| s.synthdef_name.clone())
                 .unwrap_or_else(|| "tuidaw_saw".to_string()),
@@ -97,7 +97,7 @@ impl OscType {
 
     pub fn default_params(&self) -> Vec<Param> {
         match self {
-            OscType::AudioIn => vec![
+            SourceType::AudioIn => vec![
                 Param {
                     name: "gain".to_string(),
                     value: ParamValue::Float(1.0),
@@ -123,7 +123,7 @@ impl OscType {
                     max: 2000.0,
                 },
             ],
-            OscType::BusIn => vec![
+            SourceType::BusIn => vec![
                 Param {
                     name: "bus".to_string(),
                     value: ParamValue::Int(1),
@@ -137,7 +137,7 @@ impl OscType {
                     max: 4.0,
                 },
             ],
-            OscType::Sample => vec![
+            SourceType::Sample => vec![
                 Param {
                     name: "rate".to_string(),
                     value: ParamValue::Float(1.0),
@@ -157,8 +157,8 @@ impl OscType {
                     max: 1.0,
                 },
             ],
-            OscType::Kit => vec![], // Pads have their own levels
-            OscType::Custom(_) => vec![], // Use default_params_with_registry instead
+            SourceType::Kit => vec![], // Pads have their own levels
+            SourceType::Custom(_) => vec![], // Use default_params_with_registry instead
             _ => vec![
                 Param {
                     name: "freq".to_string(),
@@ -180,7 +180,7 @@ impl OscType {
     #[allow(dead_code)]
     pub fn default_params_with_registry(&self, registry: &CustomSynthDefRegistry) -> Vec<Param> {
         match self {
-            OscType::Custom(id) => registry
+            SourceType::Custom(id) => registry
                 .get(*id)
                 .map(|s| {
                     s.params
@@ -199,45 +199,45 @@ impl OscType {
     }
 
     pub fn is_audio_input(&self) -> bool {
-        matches!(self, OscType::AudioIn)
+        matches!(self, SourceType::AudioIn)
     }
 
     pub fn is_sample(&self) -> bool {
-        matches!(self, OscType::Sample)
+        matches!(self, SourceType::Sample)
     }
 
     pub fn is_kit(&self) -> bool {
-        matches!(self, OscType::Kit)
+        matches!(self, SourceType::Kit)
     }
 
     pub fn is_bus_in(&self) -> bool {
-        matches!(self, OscType::BusIn)
+        matches!(self, SourceType::BusIn)
     }
 
     #[allow(dead_code)]
     pub fn is_custom(&self) -> bool {
-        matches!(self, OscType::Custom(_))
+        matches!(self, SourceType::Custom(_))
     }
 
     #[allow(dead_code)]
     pub fn custom_id(&self) -> Option<CustomSynthDefId> {
         match self {
-            OscType::Custom(id) => Some(*id),
+            SourceType::Custom(id) => Some(*id),
             _ => None,
         }
     }
 
     /// Built-in oscillator types (excluding custom)
-    pub fn all() -> Vec<OscType> {
-        vec![OscType::Saw, OscType::Sin, OscType::Sqr, OscType::Tri, OscType::AudioIn, OscType::BusIn, OscType::Sample, OscType::Kit]
+    pub fn all() -> Vec<SourceType> {
+        vec![SourceType::Saw, SourceType::Sin, SourceType::Sqr, SourceType::Tri, SourceType::AudioIn, SourceType::BusIn, SourceType::Sample, SourceType::Kit]
     }
 
     /// All oscillator types including custom ones from registry
     #[allow(dead_code)]
-    pub fn all_with_custom(registry: &CustomSynthDefRegistry) -> Vec<OscType> {
+    pub fn all_with_custom(registry: &CustomSynthDefRegistry) -> Vec<SourceType> {
         let mut types = Self::all();
         for synthdef in &registry.synthdefs {
-            types.push(OscType::Custom(synthdef.id));
+            types.push(SourceType::Custom(synthdef.id));
         }
         types
     }
@@ -605,7 +605,7 @@ pub const MAX_BUSES: usize = 8;
 pub struct Instrument {
     pub id: InstrumentId,
     pub name: String,
-    pub source: OscType,
+    pub source: SourceType,
     pub source_params: Vec<Param>,
     pub filter: Option<FilterConfig>,
     pub effects: Vec<EffectSlot>,
@@ -620,14 +620,14 @@ pub struct Instrument {
     pub solo: bool,
     pub output_target: OutputTarget,
     pub sends: Vec<MixerSend>,
-    // Sample configuration (only used when source is OscType::Sample)
+    // Sample configuration (only used when source is SourceType::Sample)
     pub sampler_config: Option<SamplerConfig>,
-    // Kit sequencer (only used when source is OscType::Kit)
+    // Kit sequencer (only used when source is SourceType::Kit)
     pub drum_sequencer: Option<DrumSequencerState>,
 }
 
 impl Instrument {
-    pub fn new(id: InstrumentId, source: OscType) -> Self {
+    pub fn new(id: InstrumentId, source: SourceType) -> Self {
         let sends = (1..=MAX_BUSES as u8).map(MixerSend::new).collect();
         // Audio input and kit instruments don't have piano roll tracks
         let has_track = !source.is_audio_input() && !source.is_kit() && !source.is_bus_in();

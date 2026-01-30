@@ -17,7 +17,7 @@ impl InstrumentState {
         }
     }
 
-    pub fn add_instrument(&mut self, source: SourceType) -> InstrumentId {
+    pub fn add_instrument(&mut self, source: OscType) -> InstrumentId {
         let id = self.next_id;
         self.next_id += 1;
         let instrument = Instrument::new(id, source);
@@ -129,8 +129,8 @@ mod tests {
     #[test]
     fn test_add_instrument() {
         let mut state = InstrumentState::new();
-        let id1 = state.add_instrument(SourceType::Saw);
-        let id2 = state.add_instrument(SourceType::Sin);
+        let id1 = state.add_instrument(OscType::Saw);
+        let id2 = state.add_instrument(OscType::Sin);
 
         assert_eq!(state.instruments.len(), 2);
         assert_eq!(state.instruments[0].id, id1);
@@ -141,9 +141,9 @@ mod tests {
     #[test]
     fn test_remove_instrument() {
         let mut state = InstrumentState::new();
-        let id1 = state.add_instrument(SourceType::Saw);
-        let id2 = state.add_instrument(SourceType::Sin);
-        let _id3 = state.add_instrument(SourceType::Sqr);
+        let id1 = state.add_instrument(OscType::Saw);
+        let id2 = state.add_instrument(OscType::Sin);
+        let _id3 = state.add_instrument(OscType::Sqr);
 
         state.remove_instrument(id2);
 
@@ -154,8 +154,8 @@ mod tests {
     #[test]
     fn test_remove_last_instrument() {
         let mut state = InstrumentState::new();
-        let id1 = state.add_instrument(SourceType::Saw);
-        let id2 = state.add_instrument(SourceType::Sin);
+        let id1 = state.add_instrument(OscType::Saw);
+        let id2 = state.add_instrument(OscType::Sin);
 
         state.selected = Some(1);
         state.remove_instrument(id2);
@@ -167,7 +167,7 @@ mod tests {
     #[test]
     fn test_remove_all_instruments() {
         let mut state = InstrumentState::new();
-        let id1 = state.add_instrument(SourceType::Saw);
+        let id1 = state.add_instrument(OscType::Saw);
 
         state.remove_instrument(id1);
         assert_eq!(state.selected, None);
@@ -177,9 +177,9 @@ mod tests {
     #[test]
     fn test_select_navigation() {
         let mut state = InstrumentState::new();
-        state.add_instrument(SourceType::Saw);
-        state.add_instrument(SourceType::Sin);
-        state.add_instrument(SourceType::Sqr);
+        state.add_instrument(OscType::Saw);
+        state.add_instrument(OscType::Sin);
+        state.add_instrument(OscType::Sqr);
 
         assert_eq!(state.selected, Some(0));
         state.select_next();

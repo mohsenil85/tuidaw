@@ -36,11 +36,11 @@ impl AppState {
     }
 
     /// Add an instrument, with custom synthdef param setup and piano roll track auto-creation.
-    pub fn add_instrument(&mut self, source: SourceType) -> InstrumentId {
+    pub fn add_instrument(&mut self, source: OscType) -> InstrumentId {
         let id = self.instruments.add_instrument(source);
 
         // For custom synthdefs, set params from registry
-        if let SourceType::Custom(custom_id) = source {
+        if let OscType::Custom(custom_id) = source {
             if let Some(synthdef) = self.session.custom_synthdefs.get(custom_id) {
                 if let Some(inst) = self.instruments.instrument_mut(id) {
                     inst.name = format!("{}-{}", synthdef.synthdef_name, id);

@@ -1,12 +1,12 @@
 use std::any::Any;
 
-use crate::state::{AppState, CustomSynthDefRegistry, OscType};
+use crate::state::{AppState, CustomSynthDefRegistry, SourceType};
 use crate::ui::{Action, Color, FileSelectAction, Graphics, InputEvent, InstrumentAction, Keymap, NavAction, Pane, Rect, SessionAction, Style};
 
 /// Options available in the Add Instrument menu
 #[derive(Debug, Clone)]
 pub enum AddOption {
-    OscType(OscType),
+    Source(SourceType),
     Separator(&'static str),
     ImportCustom,
 }
@@ -32,8 +32,8 @@ impl AddPane {
         let mut options = Vec::new();
 
         // Built-in types
-        for osc in OscType::all() {
-            options.push(AddOption::OscType(osc));
+        for source in SourceType::all() {
+            options.push(AddOption::Source(source));
         }
 
         // Custom section
@@ -48,8 +48,8 @@ impl AddPane {
         let mut options = Vec::new();
 
         // Built-in types
-        for osc in OscType::all() {
-            options.push(AddOption::OscType(osc));
+        for source in SourceType::all() {
+            options.push(AddOption::Source(source));
         }
 
         // Custom section
@@ -57,7 +57,7 @@ impl AddPane {
 
         // Custom synthdefs
         for synthdef in &registry.synthdefs {
-            options.push(AddOption::OscType(OscType::Custom(synthdef.id)));
+            options.push(AddOption::Source(SourceType::Custom(synthdef.id)));
         }
 
         // Import option
@@ -135,7 +135,7 @@ impl AddPane {
                     g.set_style(Style::new().fg(Color::DARK_GRAY));
                     g.put_str(content_x, y, label);
                 }
-                AddOption::OscType(osc) => {
+                AddOption::Source(source) => {
                     if is_selected {
                         g.set_style(
                             Style::new()
@@ -150,11 +150,11 @@ impl AddPane {
                     }
 
                     // Color based on type
-                    let color = match osc {
-                        OscType::AudioIn => Color::AUDIO_IN_COLOR,
-                        OscType::BusIn => Color::BUS_IN_COLOR,
-                        OscType::Sample => Color::SAMPLE_COLOR,
-                        OscType::Custom(_) => Color::CUSTOM_COLOR,
+                    let color = match source {
+                        SourceType::AudioIn => Color::AUDIO_IN_COLOR,
+                        SourceType::BusIn => Color::BUS_IN_COLOR,
+                        SourceType::Sample => Color::SAMPLE_COLOR,
+                        SourceType::Custom(_) => Color::CUSTOM_COLOR,
                         _ => Color::OSC_COLOR,
                     };
 
@@ -164,7 +164,7 @@ impl AddPane {
                         g.set_style(Style::new().fg(color));
                     }
 
-                    let short = osc.short_name_with_registry(registry);
+                    let short = source.short_name_with_registry(registry);
                     g.put_str(content_x + 2, y, &format!("{:12}", short));
 
                     if is_selected {
@@ -173,7 +173,7 @@ impl AddPane {
                         g.set_style(Style::new().fg(Color::DARK_GRAY));
                     }
 
-                    let name = osc.display_name(registry);
+                    let name = source.display_name(registry);
                     g.put_str(content_x + 15, y, &name);
 
                     // Fill rest of line if selected
@@ -243,7 +243,7 @@ impl Pane for AddPane {
             Some("confirm") => {
                 if let Some(option) = self.cached_options.get(self.selected) {
                     match option {
-                        AddOption::OscType(osc) => Action::Instrument(InstrumentAction::Add(*osc)),
+                        AddOption::Source(source) => Action::Instrument(InstrumentAction::Add(*source)),
                         AddOption::ImportCustom => {
                             Action::Session(SessionAction::OpenFileBrowser(FileSelectAction::ImportCustomSynthDef))
                         }

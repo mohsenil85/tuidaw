@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 
 use super::bus_allocator::BusAllocator;
 use super::osc_client::OscClient;
-use crate::state::{AutomationTarget, BufferId, CustomSynthDefRegistry, EffectType, FilterType, OscType, ParamValue, SessionState, InstrumentId, InstrumentState};
+use crate::state::{AutomationTarget, BufferId, CustomSynthDefRegistry, EffectType, FilterType, SourceType, ParamValue, SessionState, InstrumentId, InstrumentState};
 
 #[allow(dead_code)]
 pub type ModuleId = u32;
@@ -329,8 +329,8 @@ impl AudioEngine {
         Ok(())
     }
 
-    fn osc_synth_def(osc: OscType, registry: &CustomSynthDefRegistry) -> String {
-        osc.synth_def_name_with_registry(registry)
+    fn source_synth_def(source: SourceType, registry: &CustomSynthDefRegistry) -> String {
+        source.synth_def_name_with_registry(registry)
     }
 
     fn filter_synth_def(ft: FilterType) -> &'static str {
@@ -343,7 +343,7 @@ impl AudioEngine {
 
     /// Rebuild all routing based on instrument state.
     /// Per instrument, create a deterministic synth chain:
-    /// 1. Source synth (osc)
+    /// 1. Source synth
     /// 2. Optional filter synth
     /// 3. Effect synths in order
     /// 4. Output synth with level/pan/mute
@@ -824,13 +824,13 @@ impl AudioEngine {
             });
         }
 
-        // 3. Source oscillator
-        let osc_node_id = self.next_node_id;
+        // 3. Source synth
+        let source_node_id = self.next_node_id;
         self.next_node_id += 1;
         {
             let mut args: Vec<rosc::OscType> = vec![
-                rosc::OscType::String(Self::osc_synth_def(instrument.source, &session.custom_synthdefs)),
-                rosc::OscType::Int(osc_node_id),
+                rosc::OscType::String(Self::source_synth_def(instrument.source, &session.custom_synthdefs)),
+                rosc::OscType::Int(source_node_id),
                 rosc::OscType::Int(1),
                 rosc::OscType::Int(group_id),
             ];
@@ -879,7 +879,7 @@ impl AudioEngine {
             pitch,
             group_id,
             midi_node_id,
-            source_node: osc_node_id,
+            source_node: source_node_id,
             spawn_time: Instant::now(),
         });
 

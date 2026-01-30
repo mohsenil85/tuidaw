@@ -1,18 +1,19 @@
 use std::any::Any;
 
-use crate::state::{AppState, OscType};
+use crate::state::{AppState, SourceType};
 use crate::ui::{Action, NavAction, InstrumentAction, SessionAction, Color, Graphics, InputEvent, KeyCode, Keymap, PadKeyboard, Pane, PianoKeyboard, Rect, Style};
 
-fn osc_color(osc: OscType) -> Color {
+fn osc_color(osc: SourceType) -> Color {
     match osc {
-        OscType::Saw => Color::OSC_COLOR,
-        OscType::Sin => Color::OSC_COLOR,
-        OscType::Sqr => Color::OSC_COLOR,
-        OscType::Tri => Color::OSC_COLOR,
-        OscType::AudioIn => Color::AUDIO_IN_COLOR,
-        OscType::Sample => Color::SAMPLE_COLOR,
-        OscType::Kit => Color::DRUM_COLOR,
-        OscType::Custom(_) => Color::CUSTOM_COLOR,
+        SourceType::Saw => Color::OSC_COLOR,
+        SourceType::Sin => Color::OSC_COLOR,
+        SourceType::Sqr => Color::OSC_COLOR,
+        SourceType::Tri => Color::OSC_COLOR,
+        SourceType::AudioIn => Color::AUDIO_IN_COLOR,
+        SourceType::Sample => Color::SAMPLE_COLOR,
+        SourceType::Kit => Color::KIT_COLOR,
+        SourceType::BusIn => Color::BUS_IN_COLOR,
+        SourceType::Custom(_) => Color::CUSTOM_COLOR,
     }
 }
 
@@ -271,7 +272,7 @@ impl Pane for InstrumentPane {
 
         // Piano/Pad mode indicator
         if self.pad_keyboard.is_active() {
-            g.set_style(Style::new().fg(Color::BLACK).bg(Color::DRUM_COLOR));
+            g.set_style(Style::new().fg(Color::BLACK).bg(Color::KIT_COLOR));
             let pad_str = self.pad_keyboard.status_label();
             let pad_x = rect.x + rect.width - pad_str.len() as u16 - 1;
             g.put_str(pad_x, rect.y, &pad_str);

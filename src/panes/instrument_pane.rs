@@ -1,19 +1,19 @@
 use std::any::Any;
 
-use crate::state::{AppState, OscType};
+use crate::state::{AppState, SourceType};
 use crate::ui::{Action, NavAction, InstrumentAction, SessionAction, Color, Graphics, InputEvent, KeyCode, Keymap, PadKeyboard, Pane, PianoKeyboard, Rect, Style};
 
-fn osc_color(osc: OscType) -> Color {
-    match osc {
-        OscType::Saw => Color::OSC_COLOR,
-        OscType::Sin => Color::OSC_COLOR,
-        OscType::Sqr => Color::OSC_COLOR,
-        OscType::Tri => Color::OSC_COLOR,
-        OscType::AudioIn => Color::AUDIO_IN_COLOR,
-        OscType::Sample => Color::SAMPLE_COLOR,
-        OscType::Kit => Color::KIT_COLOR,
-        OscType::BusIn => Color::BUS_IN_COLOR,
-        OscType::Custom(_) => Color::CUSTOM_COLOR,
+fn source_color(source: SourceType) -> Color {
+    match source {
+        SourceType::Saw => Color::OSC_COLOR,
+        SourceType::Sin => Color::OSC_COLOR,
+        SourceType::Sqr => Color::OSC_COLOR,
+        SourceType::Tri => Color::OSC_COLOR,
+        SourceType::AudioIn => Color::AUDIO_IN_COLOR,
+        SourceType::Sample => Color::SAMPLE_COLOR,
+        SourceType::Kit => Color::KIT_COLOR,
+        SourceType::BusIn => Color::BUS_IN_COLOR,
+        SourceType::Custom(_) => Color::CUSTOM_COLOR,
     }
 }
 
@@ -215,7 +215,7 @@ impl Pane for InstrumentPane {
             g.put_str(content_x + 2, y, &name_str);
 
             // Osc type
-            let osc_c = osc_color(instrument.source);
+            let osc_c = source_color(instrument.source);
             if is_selected {
                 g.set_style(Style::new().fg(osc_c).bg(Color::SELECTION_BG));
             } else {

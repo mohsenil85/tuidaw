@@ -589,7 +589,7 @@ fn save_instruments(conn: &SqlConnection, instruments: &InstrumentState) -> SqlR
     )?;
     for (pos, inst) in instruments.instruments.iter().enumerate() {
         let source_str = match inst.source {
-            OscType::Custom(id) => format!("custom:{}", id),
+            SourceType::Custom(id) => format!("custom:{}", id),
             _ => inst.source.short_name().to_string(),
         };
         let (filter_type, filter_cutoff, filter_res): (Option<String>, Option<f64>, Option<f64>) =
@@ -1090,7 +1090,7 @@ fn load_instruments(conn: &SqlConnection) -> SqlResult<Vec<Instrument>> {
             output_str,
         ) = result?;
 
-        let source = parse_osc_type(&source_str);
+        let source = parse_source_type(&source_str);
         let filter = filter_type_str.map(|ft| {
             let filter_type = parse_filter_type(&ft);
             let mut config = FilterConfig::new(filter_type);
@@ -2043,24 +2043,24 @@ fn parse_scale(s: &str) -> Scale {
         .unwrap_or(Scale::Major)
 }
 
-fn parse_osc_type(s: &str) -> OscType {
+fn parse_source_type(s: &str) -> SourceType {
     match s {
-        "saw" => OscType::Saw,
-        "sin" => OscType::Sin,
-        "sqr" => OscType::Sqr,
-        "tri" => OscType::Tri,
-        "audio_in" => OscType::AudioIn,
-        "sample" | "sampler" => OscType::Sample,
-        "kit" | "drum" => OscType::Kit,
-        "bus_in" => OscType::BusIn,
+        "saw" => SourceType::Saw,
+        "sin" => SourceType::Sin,
+        "sqr" => SourceType::Sqr,
+        "tri" => SourceType::Tri,
+        "audio_in" => SourceType::AudioIn,
+        "sample" | "sampler" => SourceType::Sample,
+        "kit" | "drum" => SourceType::Kit,
+        "bus_in" => SourceType::BusIn,
         other if other.starts_with("custom:") => {
             if let Ok(id) = other[7..].parse::<u32>() {
-                OscType::Custom(id)
+                SourceType::Custom(id)
             } else {
-                OscType::Saw
+                SourceType::Saw
             }
         }
-        _ => OscType::Saw,
+        _ => SourceType::Saw,
     }
 }
 

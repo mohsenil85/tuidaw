@@ -2,7 +2,7 @@ use std::any::Any;
 
 use crate::state::{
     AppState, EffectSlot, EffectType, EnvConfig, FilterConfig, FilterType, LfoConfig,
-    SourceType, Param, ParamValue, InstrumentId, Instrument,
+    OscType, Param, ParamValue, InstrumentId, Instrument,
 };
 use crate::ui::widgets::TextInput;
 use crate::ui::{Action, Color, Graphics, InputEvent, KeyCode, Keymap, Pane, PianoKeyboard, Rect, InstrumentAction, Style};
@@ -21,7 +21,7 @@ pub struct InstrumentEditPane {
     keymap: Keymap,
     instrument_id: Option<InstrumentId>,
     instrument_name: String,
-    source: SourceType,
+    source: OscType,
     source_params: Vec<Param>,
     filter: Option<FilterConfig>,
     effects: Vec<EffectSlot>,
@@ -41,7 +41,7 @@ impl InstrumentEditPane {
             keymap,
             instrument_id: None,
             instrument_name: String::new(),
-            source: SourceType::Saw,
+            source: OscType::Saw,
             source_params: Vec::new(),
             filter: None,
             effects: Vec::new(),
