@@ -157,6 +157,22 @@ fn dispatch_strip(
                 state.strip.selected = Some(state.strip.strips.len() - 1);
             }
         }
+        StripAction::PlayDrumPad(pad_idx) => {
+            if let Some(strip) = state.strip.selected_strip() {
+                if let Some(seq) = &strip.drum_sequencer {
+                    if let Some(pad) = seq.pads.get(*pad_idx) {
+                        if let (Some(buffer_id), strip_id) = (pad.buffer_id, strip.id) {
+                            let amp = pad.level;
+                            if audio_engine.is_running() {
+                                let _ = audio_engine.play_drum_hit_to_strip(
+                                    buffer_id, amp, strip_id,
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
         StripAction::AddEffect(_, _)
         | StripAction::RemoveEffect(_, _)
         | StripAction::MoveEffect(_, _, _)
@@ -482,11 +498,15 @@ fn dispatch_server(
                             Ok(())
                         };
 
-                        // Load drum sequencer samples
-                        for pad in &state.session.drum_sequencer.pads {
-                            if let Some(buffer_id) = pad.buffer_id {
-                                if let Some(ref path) = pad.path {
-                                    let _ = audio_engine.load_sample(buffer_id, path);
+                        // Load drum sequencer samples for all drum machine strips
+                        for strip in &state.strip.strips {
+                            if let Some(seq) = &strip.drum_sequencer {
+                                for pad in &seq.pads {
+                                    if let Some(buffer_id) = pad.buffer_id {
+                                        if let Some(ref path) = pad.path {
+                                            let _ = audio_engine.load_sample(buffer_id, path);
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -724,85 +744,94 @@ fn dispatch_sequencer(
 ) {
     match action {
         SequencerAction::ToggleStep(pad_idx, step_idx) => {
-            if let Some(step) = state
-                .session
-                .drum_sequencer
-                .pattern_mut()
-                .steps
-                .get_mut(*pad_idx)
-                .and_then(|s| s.get_mut(*step_idx))
-            {
-                step.active = !step.active;
+            if let Some(seq) = state.strip.selected_drum_sequencer_mut() {
+                if let Some(step) = seq
+                    .pattern_mut()
+                    .steps
+                    .get_mut(*pad_idx)
+                    .and_then(|s| s.get_mut(*step_idx))
+                {
+                    step.active = !step.active;
+                }
             }
         }
         SequencerAction::AdjustVelocity(pad_idx, step_idx, delta) => {
-            if let Some(step) = state
-                .session
-                .drum_sequencer
-                .pattern_mut()
-                .steps
-                .get_mut(*pad_idx)
-                .and_then(|s| s.get_mut(*step_idx))
-            {
-                step.velocity = (step.velocity as i16 + *delta as i16).clamp(1, 127) as u8;
+            if let Some(seq) = state.strip.selected_drum_sequencer_mut() {
+                if let Some(step) = seq
+                    .pattern_mut()
+                    .steps
+                    .get_mut(*pad_idx)
+                    .and_then(|s| s.get_mut(*step_idx))
+                {
+                    step.velocity = (step.velocity as i16 + *delta as i16).clamp(1, 127) as u8;
+                }
             }
         }
         SequencerAction::ClearPad(pad_idx) => {
-            for step in state
-                .session
-                .drum_sequencer
-                .pattern_mut()
-                .steps
-                .get_mut(*pad_idx)
-                .iter_mut()
-                .flat_map(|s| s.iter_mut())
-            {
-                step.active = false;
+            if let Some(seq) = state.strip.selected_drum_sequencer_mut() {
+                for step in seq
+                    .pattern_mut()
+                    .steps
+                    .get_mut(*pad_idx)
+                    .iter_mut()
+                    .flat_map(|s| s.iter_mut())
+                {
+                    step.active = false;
+                }
             }
         }
         SequencerAction::ClearPattern => {
-            let len = state.session.drum_sequencer.pattern().length;
-            *state.session.drum_sequencer.pattern_mut() = DrumPattern::new(len);
+            if let Some(seq) = state.strip.selected_drum_sequencer_mut() {
+                let len = seq.pattern().length;
+                *seq.pattern_mut() = DrumPattern::new(len);
+            }
         }
         SequencerAction::CyclePatternLength => {
-            let lengths = [8, 16, 32, 64];
-            let current = state.session.drum_sequencer.pattern().length;
-            let idx = lengths.iter().position(|&l| l == current).unwrap_or(0);
-            let new_len = lengths[(idx + 1) % lengths.len()];
-            let old_pattern = state.session.drum_sequencer.pattern().clone();
-            let mut new_pattern = DrumPattern::new(new_len);
-            for (pad_idx, old_steps) in old_pattern.steps.iter().enumerate() {
-                for (step_idx, step) in old_steps.iter().enumerate() {
-                    if step_idx < new_len {
-                        new_pattern.steps[pad_idx][step_idx] = step.clone();
+            if let Some(seq) = state.strip.selected_drum_sequencer_mut() {
+                let lengths = [8, 16, 32, 64];
+                let current = seq.pattern().length;
+                let idx = lengths.iter().position(|&l| l == current).unwrap_or(0);
+                let new_len = lengths[(idx + 1) % lengths.len()];
+                let old_pattern = seq.pattern().clone();
+                let mut new_pattern = DrumPattern::new(new_len);
+                for (pad_idx, old_steps) in old_pattern.steps.iter().enumerate() {
+                    for (step_idx, step) in old_steps.iter().enumerate() {
+                        if step_idx < new_len {
+                            new_pattern.steps[pad_idx][step_idx] = step.clone();
+                        }
                     }
                 }
+                *seq.pattern_mut() = new_pattern;
             }
-            *state.session.drum_sequencer.pattern_mut() = new_pattern;
         }
         SequencerAction::NextPattern => {
-            let seq = &mut state.session.drum_sequencer;
-            seq.current_pattern = (seq.current_pattern + 1) % seq.patterns.len();
+            if let Some(seq) = state.strip.selected_drum_sequencer_mut() {
+                seq.current_pattern = (seq.current_pattern + 1) % seq.patterns.len();
+            }
         }
         SequencerAction::PrevPattern => {
-            let seq = &mut state.session.drum_sequencer;
-            seq.current_pattern = if seq.current_pattern == 0 {
-                seq.patterns.len() - 1
-            } else {
-                seq.current_pattern - 1
-            };
+            if let Some(seq) = state.strip.selected_drum_sequencer_mut() {
+                seq.current_pattern = if seq.current_pattern == 0 {
+                    seq.patterns.len() - 1
+                } else {
+                    seq.current_pattern - 1
+                };
+            }
         }
         SequencerAction::AdjustPadLevel(pad_idx, delta) => {
-            if let Some(pad) = state.session.drum_sequencer.pads.get_mut(*pad_idx) {
-                pad.level = (pad.level + delta).clamp(0.0, 1.0);
+            if let Some(seq) = state.strip.selected_drum_sequencer_mut() {
+                if let Some(pad) = seq.pads.get_mut(*pad_idx) {
+                    pad.level = (pad.level + delta).clamp(0.0, 1.0);
+                }
             }
         }
         SequencerAction::PlayStop => {
-            let seq = &mut state.session.drum_sequencer;
-            seq.playing = !seq.playing;
-            if !seq.playing {
-                seq.current_step = 0;
-                seq.step_accumulator = 0.0;
+            if let Some(seq) = state.strip.selected_drum_sequencer_mut() {
+                seq.playing = !seq.playing;
+                if !seq.playing {
+                    seq.current_step = 0;
+                    seq.step_accumulator = 0.0;
+                }
             }
         }
         SequencerAction::LoadSample(pad_idx) => {
@@ -821,18 +850,19 @@ fn dispatch_sequencer(
                 .map(|s| s.to_string_lossy().to_string())
                 .unwrap_or_default();
 
-            let seq = &mut state.session.drum_sequencer;
-            let buffer_id = seq.next_buffer_id;
-            seq.next_buffer_id += 1;
+            if let Some(seq) = state.strip.selected_drum_sequencer_mut() {
+                let buffer_id = seq.next_buffer_id;
+                seq.next_buffer_id += 1;
 
-            if audio_engine.is_running() {
-                let _ = audio_engine.load_sample(buffer_id, &path_str);
-            }
+                if audio_engine.is_running() {
+                    let _ = audio_engine.load_sample(buffer_id, &path_str);
+                }
 
-            if let Some(pad) = seq.pads.get_mut(*pad_idx) {
-                pad.buffer_id = Some(buffer_id);
-                pad.path = Some(path_str);
-                pad.name = name;
+                if let Some(pad) = seq.pads.get_mut(*pad_idx) {
+                    pad.buffer_id = Some(buffer_id);
+                    pad.path = Some(path_str);
+                    pad.name = name;
+                }
             }
 
             panes.pop(&*state);

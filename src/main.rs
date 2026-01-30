@@ -104,10 +104,19 @@ fn run(backend: &mut RatatuiBackend) -> std::io::Result<()> {
 
                 let (target, is_push) = match c {
                     '1' => (Some("strip"), false),
-                    '2' => (Some("piano_roll"), false),
-                    '3' => (Some("sequencer"), false),
-                    '4' => (Some("mixer"), false),
-                    '5' => (Some("server"), false),
+                    '2' => {
+                        // Context-dependent: step sequencer for drum machines, piano roll otherwise
+                        let target = if state.strip.selected_strip()
+                            .map_or(false, |s| s.source.is_drum_machine())
+                        {
+                            "sequencer"
+                        } else {
+                            "piano_roll"
+                        };
+                        (Some(target), false)
+                    }
+                    '3' => (Some("mixer"), false),
+                    '4' => (Some("server"), false),
                     '`' => {
                         // Back navigation
                         if let Some(back) = app_frame.back_view.take() {
@@ -135,7 +144,7 @@ fn run(backend: &mut RatatuiBackend) -> std::io::Result<()> {
                                 "mixer" => "Mixer",
                                 "server" => "Server",
                                 "piano_roll" => "Piano Roll",
-                                "sequencer" => "Sequencer",
+                                "sequencer" => "Step Sequencer",
                                 "add" => "Add Strip",
                                 "strip_edit" => "Edit Strip",
                                 _ => current_id,

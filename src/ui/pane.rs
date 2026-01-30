@@ -53,6 +53,7 @@ pub enum StripAction {
     SelectPrev,
     SelectFirst,
     SelectLast,
+    PlayDrumPad(usize),
 }
 
 /// Mixer actions

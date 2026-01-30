@@ -57,7 +57,11 @@ impl Pane for SequencerPane {
     }
 
     fn handle_input(&mut self, event: InputEvent, state: &AppState) -> Action {
-        let pattern_length = state.session.drum_sequencer.pattern().length;
+        let seq = match state.strip.selected_drum_sequencer() {
+            Some(s) => s,
+            None => return Action::None,
+        };
+        let pattern_length = seq.pattern().length;
 
         // Manual shift checks before keymap lookup
         if event.modifiers.shift {
@@ -132,7 +136,18 @@ impl Pane for SequencerPane {
         let box_height: u16 = 29;
         let rect = Rect::centered(width, height, box_width, box_height);
 
-        let seq = &state.session.drum_sequencer;
+        let seq = match state.strip.selected_drum_sequencer() {
+            Some(s) => s,
+            None => {
+                g.set_style(Style::new().fg(Color::ORANGE));
+                g.draw_box(rect, Some(" Drum Sequencer "));
+                let cx = rect.x + 2;
+                let cy = rect.y + rect.height / 2;
+                g.set_style(Style::new().fg(Color::DARK_GRAY));
+                g.put_str(cx + 10, cy, "No drum machine strip selected. Press 1 to add one.");
+                return;
+            }
+        };
         let pattern = seq.pattern();
         let visible = self.visible_steps(box_width);
 

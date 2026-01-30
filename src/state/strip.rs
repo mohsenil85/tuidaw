@@ -1,4 +1,5 @@
 use super::custom_synthdef::{CustomSynthDefId, CustomSynthDefRegistry};
+use super::drum_sequencer::DrumSequencerState;
 use super::param::{Param, ParamValue};
 use super::sampler::SamplerConfig;
 
@@ -12,6 +13,7 @@ pub enum OscType {
     Tri,
     AudioIn,
     Sampler,
+    DrumMachine,
     Custom(CustomSynthDefId),
 }
 
@@ -24,6 +26,7 @@ impl OscType {
             OscType::Tri => "Triangle",
             OscType::AudioIn => "Audio In",
             OscType::Sampler => "Sampler",
+            OscType::DrumMachine => "Drum Machine",
             OscType::Custom(_) => "Custom",
         }
     }
@@ -47,6 +50,7 @@ impl OscType {
             OscType::Tri => "tri",
             OscType::AudioIn => "audio_in",
             OscType::Sampler => "sampler",
+            OscType::DrumMachine => "drum",
             OscType::Custom(_) => "custom",
         }
     }
@@ -71,6 +75,7 @@ impl OscType {
             OscType::Tri => "tuidaw_tri",
             OscType::AudioIn => "tuidaw_audio_in",
             OscType::Sampler => "tuidaw_sampler",
+            OscType::DrumMachine => "tuidaw_sampler_oneshot",
             OscType::Custom(_) => "tuidaw_saw", // Fallback, use synth_def_name_with_registry instead
         }
     }
@@ -134,6 +139,7 @@ impl OscType {
                     max: 1.0,
                 },
             ],
+            OscType::DrumMachine => vec![], // Pads have their own levels
             OscType::Custom(_) => vec![], // Use default_params_with_registry instead
             _ => vec![
                 Param {
@@ -182,6 +188,10 @@ impl OscType {
         matches!(self, OscType::Sampler)
     }
 
+    pub fn is_drum_machine(&self) -> bool {
+        matches!(self, OscType::DrumMachine)
+    }
+
     #[allow(dead_code)]
     pub fn is_custom(&self) -> bool {
         matches!(self, OscType::Custom(_))
@@ -197,7 +207,7 @@ impl OscType {
 
     /// Built-in oscillator types (excluding custom)
     pub fn all() -> Vec<OscType> {
-        vec![OscType::Saw, OscType::Sin, OscType::Sqr, OscType::Tri, OscType::AudioIn, OscType::Sampler]
+        vec![OscType::Saw, OscType::Sin, OscType::Sqr, OscType::Tri, OscType::AudioIn, OscType::Sampler, OscType::DrumMachine]
     }
 
     /// All oscillator types including custom ones from registry
@@ -590,16 +600,24 @@ pub struct Strip {
     pub sends: Vec<MixerSend>,
     // Sampler configuration (only used when source is OscType::Sampler)
     pub sampler_config: Option<SamplerConfig>,
+    // Drum sequencer (only used when source is OscType::DrumMachine)
+    pub drum_sequencer: Option<DrumSequencerState>,
 }
 
 impl Strip {
     pub fn new(id: StripId, source: OscType) -> Self {
         let sends = (1..=MAX_BUSES as u8).map(MixerSend::new).collect();
-        // Audio input strips don't have piano roll tracks
-        let has_track = !source.is_audio_input();
+        // Audio input and drum machine strips don't have piano roll tracks
+        let has_track = !source.is_audio_input() && !source.is_drum_machine();
         // Sampler strips get a sampler config
         let sampler_config = if source.is_sampler() {
             Some(SamplerConfig::default())
+        } else {
+            None
+        };
+        // Drum machine strips get a drum sequencer
+        let drum_sequencer = if source.is_drum_machine() {
+            Some(DrumSequencerState::new())
         } else {
             None
         };
@@ -621,6 +639,7 @@ impl Strip {
             output_target: OutputTarget::Master,
             sends,
             sampler_config,
+            drum_sequencer,
         }
     }
 }

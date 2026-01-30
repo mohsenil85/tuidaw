@@ -1075,10 +1075,19 @@ impl AudioEngine {
         }
     }
 
-    /// Play a one-shot drum sample (uses tuidaw_sampler_oneshot, auto-frees)
-    pub fn play_drum_hit(&mut self, buffer_id: BufferId, amp: f32) -> Result<(), String> {
+    /// Play a one-shot drum sample routed through a strip's signal chain
+    pub fn play_drum_hit_to_strip(
+        &mut self,
+        buffer_id: BufferId,
+        amp: f32,
+        strip_id: StripId,
+    ) -> Result<(), String> {
         let client = self.client.as_ref().ok_or("Not connected")?;
         let bufnum = *self.buffer_map.get(&buffer_id).ok_or("Buffer not loaded")?;
+        let out_bus = self
+            .bus_allocator
+            .get_audio_bus(strip_id, "source_out")
+            .unwrap_or(0);
 
         let node_id = self.next_node_id;
         self.next_node_id += 1;
@@ -1096,7 +1105,7 @@ impl AudioEngine {
                     rosc::OscType::String("amp".to_string()),
                     rosc::OscType::Float(amp),
                     rosc::OscType::String("out".to_string()),
-                    rosc::OscType::Int(0), // direct to hardware output
+                    rosc::OscType::Int(out_bus), // Route to strip's source bus
                 ],
             )
             .map_err(|e| e.to_string())?;

@@ -47,7 +47,7 @@ Implementation:
 **Status:** Partially done
 
 **What this means:** Some global shortcuts exist (`Ctrl-S` save, `Ctrl-L`
-load in `main.rs:56-72`), but export/import functionality doesn't exist
+load in `main.rs:59-69`), but export/import functionality doesn't exist
 yet. There's no UI flow for "Save As", "Open File", or
 exporting/importing individual strips or effects.
 
@@ -261,26 +261,24 @@ new pane for synth management
 **Status:** Bug — not started
 
 **What this means:** The PianoRollPane (`src/panes/piano_roll_pane.rs`)
-has at least two specific issues:
+displays BPM in the header which should be removed:
 
-1. **Remove BPM display:** BPM is shown somewhere in the piano roll
-   UI but shouldn't be (it belongs in the session/frame settings, not
-   cluttering the piano roll). Or, BPM editing controls in the piano
-   roll should be removed since they now live in FrameEditPane.
-2. **MIDI note 0 wrong name:** The lowest MIDI note (0) is displaying
-   an incorrect note name. MIDI note 0 should be C-1 (or C0 depending
-   on convention). The `pitch_to_name()` or equivalent function likely
-   has an off-by-one or formatting error for the boundary case.
+1. **Remove BPM display:** BPM is shown in the piano roll header
+   (line 194 in AudioIn mode, line 293 in MIDI mode). It belongs in
+   the session/frame settings (FrameEditPane), not cluttering the
+   piano roll.
+2. ~~**MIDI note 0 wrong name:**~~ Verified correct — `note_name(0)`
+   produces "C-1" which is the standard convention. The `note_name()`
+   function at line 10 correctly computes `(pitch / 12) - 1` for the
+   octave. No fix needed.
 
 **Proposed:**
 
-1. Find and remove BPM display/controls from the piano roll pane
-2. Fix the note name lookup for MIDI note 0 — check `pitch_to_name()`
-   or the note label rendering in the piano roll's vertical axis
-3. Audit other boundary MIDI notes (127, etc.) for similar issues
+1. Find and remove BPM display from the piano roll header (lines 194
+   and 293)
+2. ~~Fix MIDI-0 note name~~ — already correct, no action needed
 
-**Files:** `src/panes/piano_roll_pane.rs`, possibly `src/state/music.rs`
-(if note naming lives there)
+**Files:** `src/panes/piano_roll_pane.rs`
 
 ---
 
@@ -319,8 +317,8 @@ methods), `src/ui/frame.rs` (optional help indicator)
 **What this means:** Two issues:
 
 1. **Delete strip broken:** Pressing `d` in StripPane dispatches
-   `Action::DeleteStrip(strip_id)` which calls
-   `state.strip.remove_strip()` and `audio_engine.rebuild_strip_routing()`.
+   `Action::Strip(StripAction::Delete(strip_id))` which calls
+   `state.remove_strip()` and `audio_engine.rebuild_strip_routing()`.
    Something in this chain is failing — possibly the strip index goes
    stale after deletion, or the audio graph rebuild crashes, or the
    selected index isn't adjusted after removing a strip.
@@ -337,11 +335,18 @@ methods), `src/ui/frame.rs` (optional help indicator)
    index is clamped after deletion
 2. Rename the StripPane title from "Strips" (or "Rack") to "Oscillators"
    in the render method
-3. Update HomePane to show "Oscillators" instead of "Rack" and fix
-   `pane_id: "rack"` to `pane_id: "strip"` (or whatever the correct ID is)
+3. **Fix `"rack"` pane ID mismatch:** Three files reference a
+   non-existent pane ID `"rack"` but StripPane's actual ID is `"strip"`:
+   - `src/panes/home_pane.rs:25` (`pane_id: "rack"`)
+   - `src/panes/frame_edit_pane.rs:214` (`SwitchPane("rack")`)
+   - `src/panes/help_pane.rs:31` (`return_to: "rack"`)
+   All three must be changed to `"strip"`.
+4. Update HomePane to show "Oscillators" instead of "Rack"
 
 **Files:** `src/panes/strip_pane.rs`, `src/dispatch.rs` (DeleteStrip
-handler), `src/state/strip_state.rs` (remove_strip), `src/panes/home_pane.rs`
+handler), `src/state/strip_state.rs` (remove_strip),
+`src/panes/home_pane.rs`, `src/panes/frame_edit_pane.rs`,
+`src/panes/help_pane.rs`
 
 ---
 
@@ -363,12 +368,14 @@ handled properly.
    dimensions against a minimum (e.g., 80x24). If too small, show a
    centered message: `"Terminal too small (need 80x24, have WxH)"`
    instead of rendering panes
-2. **Resize handling:** Ensure the ratatui backend processes
-   `Event::Resize` events. The main loop should re-render on resize.
-   Check that `RatatuiBackend` calls `terminal.autoresize()` or
-   equivalent
-3. **Responsive layouts:** For panes using fixed `box_width`/`box_height`,
-   clamp to available terminal size with `min(box_width, term_width - 2)`
+2. **Resize handling:** The main event loop does NOT handle
+   `Event::Resize` events. Add resize handling so the UI re-renders
+   on terminal resize.
+3. **Responsive layouts:** `Rect::centered()` already uses
+   `saturating_sub()` so it won't panic on small terminals, but pane
+   content can still render outside visible bounds. Clamp
+   `box_width`/`box_height` to available terminal size with
+   `min(box_width, term_width - 2)`.
 4. **Graceful degradation:** If terminal is marginally too small, hide
    optional elements (help text, console) rather than crashing
 
@@ -443,7 +450,7 @@ inconsistent with the current codebase.
 
 **Status:** Partially implemented
 
-**What this means:** The `LfoTarget` enum (`src/state/strip.rs:368-528`)
+**What this means:** The `LfoTarget` enum (`src/state/strip.rs:434-450`)
 defines 15 modulation targets, but only `FilterCutoff` is actually wired
 up in the audio engine. The other 14 targets (FilterResonance, Amplitude,
 Pitch, Pan, PulseWidth, SampleRate, DelayTime, DelayFeedback, ReverbMix,
@@ -667,33 +674,17 @@ for integration tests
 
 ---
 
-## 23. ESC exits piano/insert mode directly
+## ~~23. ESC exits piano/insert mode directly~~ DONE
 
 **Inbox:** `esc takes you directly out of piano mode (or insert mode)`
 
-**Status:** Bug/enhancement — not started
+**Status:** Already implemented
 
-**What this means:** When piano keyboard mode is active (via `/` in
-StripPane, StripEditPane, or PianoRollPane), pressing Escape may not
-deactivate it cleanly. The `PianoKeyboard` struct
-(`src/ui/piano_keyboard.rs`) has `handle_escape()` and `deactivate()`
-methods, but the pane's input handler may route Escape to other
-actions (like "go back to previous pane") before checking piano mode.
-
-**Proposed:**
-
-1. In every pane that uses `PianoKeyboard`, check `piano.is_active()`
-   first in `handle_input()`. If active and Escape is pressed, call
-   `piano.deactivate()` and return `Action::None` — do NOT propagate
-   Escape further
-2. Same logic for any "insert mode" (text editing in StripEditPane):
-   Escape should exit insert mode, not leave the pane
-3. Establish a priority chain: insert mode > piano mode > pane navigation
-4. Audit all three panes (StripPane, StripEditPane, PianoRollPane) for
-   consistent Escape handling
-
-**Files:** `src/panes/strip_pane.rs`, `src/panes/strip_edit_pane.rs`,
-`src/panes/piano_roll_pane.rs`, `src/ui/piano_keyboard.rs`
+All three panes (StripPane, StripEditPane, PianoRollPane) check
+`piano.is_active()` first in `handle_input()` before processing
+other keys. Escape in piano mode calls `piano.handle_escape()` and
+returns `Action::None` without propagating. The priority chain
+(insert mode > piano mode > pane navigation) is already in place.
 
 ---
 
@@ -806,8 +797,10 @@ showing individual MIDI notes (like the piano roll does), it shows
 track. This makes it easy to see the song structure at a glance, loop
 sections, and move MIDI data between instruments.
 
-The current `SequencerPane` (key `3`) is a placeholder ("Coming soon...")
-— this is the natural home for the arrangement view.
+`SequencerPane` (key `3`) is now a working drum sequencer (12 pads,
+4 patterns, sample loading, playback). The arrangement view needs its
+own pane — either assigned to a new key (e.g., key `6`) or accessible
+via a toggle from the piano roll.
 
 **Toggle:** `'` (single quote) toggles between the arrangement view and
 the piano roll view (key `2`), providing a quick zoom-in/zoom-out
@@ -976,7 +969,8 @@ These can be implemented incrementally:
 
 **Phase 1 — Read-only arrangement view:**
 1. Create `src/panes/arrangement_pane.rs` implementing `Pane`
-2. Replace `SequencerPane` registration with `ArrangementPane` (key `3`)
+2. Register `ArrangementPane` on a new key (e.g., key `6`) — do NOT
+   replace the drum sequencer on key `3`
 3. Render bar ruler, track labels, and MIDI regions as colored blocks
 4. Render playhead and loop markers
 5. Add `'` keybinding in both arrangement and piano roll panes for
@@ -1122,10 +1116,10 @@ Or when disabled, omit or show dimmed.
 
 ### Bugs (fix first)
 1. **Item 4** — Broken Frame settings screen
-2. **Item 12** — Delete strip doesn't work + rename
-3. **Item 10** — Piano roll fixes (BPM display, MIDI-0 name)
+2. **Item 12** — Delete strip doesn't work + rename + fix "rack" pane ID
+3. **Item 10** — Piano roll fixes (remove BPM display)
 4. **Item 27** — File picker scroll wrapping
-5. **Item 23** — ESC exits piano/insert mode directly
+5. ~~**Item 23** — ESC exits piano/insert mode directly~~ DONE
 
 ### Quick wins
 6. **Item 26** — Remove HomePane

@@ -103,44 +103,50 @@ pub fn tick_playback(
     }
 }
 
-/// Advance the drum sequencer and trigger pad hits.
+/// Advance the drum sequencer for each drum machine strip and trigger pad hits.
 pub fn tick_drum_sequencer(
     state: &mut AppState,
     audio_engine: &mut AudioEngine,
     elapsed: Duration,
 ) {
     let bpm = state.session.piano_roll.bpm;
-    let seq = &mut state.session.drum_sequencer;
-    if !seq.playing {
-        return;
-    }
 
-    let pattern_length = seq.pattern().length;
-    // Each step = 1 sixteenth note = 1/4 beat
-    let steps_per_beat = 4.0_f32;
-    let steps_per_second = (bpm / 60.0) * steps_per_beat;
+    for strip in &mut state.strip.strips {
+        let seq = match &mut strip.drum_sequencer {
+            Some(s) => s,
+            None => continue,
+        };
+        if !seq.playing {
+            continue;
+        }
 
-    seq.step_accumulator += elapsed.as_secs_f32() * steps_per_second;
+        let pattern_length = seq.pattern().length;
+        let steps_per_beat = 4.0_f32;
+        let steps_per_second = (bpm / 60.0) * steps_per_beat;
 
-    while seq.step_accumulator >= 1.0 {
-        seq.step_accumulator -= 1.0;
-        seq.current_step = (seq.current_step + 1) % pattern_length;
+        seq.step_accumulator += elapsed.as_secs_f32() * steps_per_second;
 
-        // Trigger active pads at this step
-        if audio_engine.is_running() {
-            let current_step = seq.current_step;
-            let current_pattern = seq.current_pattern;
-            let pattern = &seq.patterns[current_pattern];
-            for (pad_idx, pad) in seq.pads.iter().enumerate() {
-                if let Some(buffer_id) = pad.buffer_id {
-                    if let Some(step) = pattern
-                        .steps
-                        .get(pad_idx)
-                        .and_then(|s| s.get(current_step))
-                    {
-                        if step.active {
-                            let amp = (step.velocity as f32 / 127.0) * pad.level;
-                            let _ = audio_engine.play_drum_hit(buffer_id, amp);
+        while seq.step_accumulator >= 1.0 {
+            seq.step_accumulator -= 1.0;
+            seq.current_step = (seq.current_step + 1) % pattern_length;
+
+            if audio_engine.is_running() && !strip.mute {
+                let current_step = seq.current_step;
+                let current_pattern = seq.current_pattern;
+                let pattern = &seq.patterns[current_pattern];
+                for (pad_idx, pad) in seq.pads.iter().enumerate() {
+                    if let Some(buffer_id) = pad.buffer_id {
+                        if let Some(step) = pattern
+                            .steps
+                            .get(pad_idx)
+                            .and_then(|s| s.get(current_step))
+                        {
+                            if step.active {
+                                let amp = (step.velocity as f32 / 127.0) * pad.level;
+                                let _ = audio_engine.play_drum_hit_to_strip(
+                                    buffer_id, amp, strip.id,
+                                );
+                            }
                         }
                     }
                 }

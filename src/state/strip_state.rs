@@ -1,3 +1,4 @@
+use super::drum_sequencer::DrumSequencerState;
 use super::strip::*;
 
 #[derive(Debug, Clone)]
@@ -95,6 +96,16 @@ impl StripState {
     #[allow(dead_code)]
     pub fn strips_with_tracks(&self) -> Vec<&Strip> {
         self.strips.iter().filter(|s| s.has_track).collect()
+    }
+
+    pub fn selected_drum_sequencer(&self) -> Option<&DrumSequencerState> {
+        self.selected_strip().and_then(|s| s.drum_sequencer.as_ref())
+    }
+
+    pub fn selected_drum_sequencer_mut(&mut self) -> Option<&mut DrumSequencerState> {
+        self.selected
+            .and_then(|idx| self.strips.get_mut(idx))
+            .and_then(|s| s.drum_sequencer.as_mut())
     }
 }
 

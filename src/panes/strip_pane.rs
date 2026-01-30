@@ -1,7 +1,7 @@
 use std::any::Any;
 
 use crate::state::{AppState, OscType};
-use crate::ui::{Action, NavAction, StripAction, SessionAction, Color, Graphics, InputEvent, KeyCode, Keymap, Pane, PianoKeyboard, Rect, Style};
+use crate::ui::{Action, NavAction, StripAction, SessionAction, Color, Graphics, InputEvent, KeyCode, Keymap, PadKeyboard, Pane, PianoKeyboard, Rect, Style};
 
 fn osc_color(osc: OscType) -> Color {
     match osc {
@@ -11,6 +11,7 @@ fn osc_color(osc: OscType) -> Color {
         OscType::Tri => Color::OSC_COLOR,
         OscType::AudioIn => Color::AUDIO_IN_COLOR,
         OscType::Sampler => Color::SAMPLER_COLOR,
+        OscType::DrumMachine => Color::DRUM_COLOR,
         OscType::Custom(_) => Color::CUSTOM_COLOR,
     }
 }
@@ -18,6 +19,7 @@ fn osc_color(osc: OscType) -> Color {
 pub struct StripPane {
     keymap: Keymap,
     piano: PianoKeyboard,
+    pad_keyboard: PadKeyboard,
 }
 
 impl StripPane {
@@ -36,6 +38,7 @@ impl StripPane {
                 .bind('o', "load", "Load")
                 .bind('/', "piano_mode", "Toggle piano keyboard mode"),
             piano: PianoKeyboard::new(),
+            pad_keyboard: PadKeyboard::new(),
         }
     }
 
@@ -75,6 +78,29 @@ impl Pane for StripPane {
     }
 
     fn handle_input(&mut self, event: InputEvent, state: &AppState) -> Action {
+        // Pad keyboard mode: letter keys trigger drum pads
+        if self.pad_keyboard.is_active() {
+            match event.key {
+                KeyCode::Char('/') | KeyCode::Escape => {
+                    self.pad_keyboard.handle_escape();
+                    return Action::None;
+                }
+                KeyCode::Up => {
+                    return Action::Strip(StripAction::SelectPrev);
+                }
+                KeyCode::Down => {
+                    return Action::Strip(StripAction::SelectNext);
+                }
+                KeyCode::Char(c) => {
+                    if let Some(pad_idx) = self.pad_keyboard.key_to_pad(c) {
+                        return Action::Strip(StripAction::PlayDrumPad(pad_idx));
+                    }
+                    return Action::None;
+                }
+                _ => return Action::None,
+            }
+        }
+
         // Piano mode: letter keys play notes
         if self.piano.is_active() {
             match event.key {
@@ -131,7 +157,14 @@ impl Pane for StripPane {
             Some("save") => Action::Session(SessionAction::Save),
             Some("load") => Action::Session(SessionAction::Load),
             Some("piano_mode") => {
-                self.piano.activate();
+                // Activate pad keyboard for drum machines, piano for everything else
+                if state.strip.selected_strip()
+                    .map_or(false, |s| s.source.is_drum_machine())
+                {
+                    self.pad_keyboard.activate();
+                } else {
+                    self.piano.activate();
+                }
                 Action::None
             }
             _ => Action::None,
@@ -247,8 +280,13 @@ impl Pane for StripPane {
             g.put_str(rect.x + rect.width - 4, list_y + max_visible as u16 - 1, "...");
         }
 
-        // Piano mode indicator
-        if self.piano.is_active() {
+        // Piano/Pad mode indicator
+        if self.pad_keyboard.is_active() {
+            g.set_style(Style::new().fg(Color::BLACK).bg(Color::DRUM_COLOR));
+            let pad_str = self.pad_keyboard.status_label();
+            let pad_x = rect.x + rect.width - pad_str.len() as u16 - 1;
+            g.put_str(pad_x, rect.y, &pad_str);
+        } else if self.piano.is_active() {
             g.set_style(Style::new().fg(Color::BLACK).bg(Color::PINK));
             let piano_str = self.piano.status_label();
             let piano_x = rect.x + rect.width - piano_str.len() as u16 - 1;
@@ -258,7 +296,9 @@ impl Pane for StripPane {
         // Help text
         let help_y = rect.y + rect.height - 2;
         g.set_style(Style::new().fg(Color::DARK_GRAY));
-        if self.piano.is_active() {
+        if self.pad_keyboard.is_active() {
+            g.put_str(content_x, help_y, "R T Y U / F G H J / V B N M: trigger pads | /: exit pad mode");
+        } else if self.piano.is_active() {
             g.put_str(content_x, help_y, "Play keys | [/]: octave | ↑/↓: select strip | /: cycle layout/exit");
         } else {
             g.put_str(content_x, help_y, "a: add | d: delete | Enter: edit | /: piano | w: save | o: load");
@@ -270,7 +310,7 @@ impl Pane for StripPane {
     }
 
     fn wants_exclusive_input(&self) -> bool {
-        self.piano.is_active()
+        self.piano.is_active() || self.pad_keyboard.is_active()
     }
 
     fn as_any_mut(&mut self) -> &mut dyn Any {
