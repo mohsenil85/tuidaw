@@ -288,6 +288,10 @@ impl Pane for FrameEditPane {
         &self.keymap
     }
 
+    fn on_enter(&mut self, state: &AppState) {
+        self.set_settings(state.session.musical_settings());
+    }
+
     fn as_any_mut(&mut self) -> &mut dyn Any {
         self
     }
