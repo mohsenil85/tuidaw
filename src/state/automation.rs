@@ -1,13 +1,11 @@
 #![allow(dead_code)]
 
-use serde::{Deserialize, Serialize};
-
 use super::strip::StripId;
 
 pub type AutomationLaneId = u32;
 
 /// Interpolation curve type between automation points
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CurveType {
     /// Linear interpolation (default)
     Linear,
@@ -26,7 +24,7 @@ impl Default for CurveType {
 }
 
 /// A single automation point
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct AutomationPoint {
     /// Position in ticks
     pub tick: u32,
@@ -55,7 +53,7 @@ impl AutomationPoint {
 }
 
 /// What parameter is being automated
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum AutomationTarget {
     /// Strip output level
     StripLevel(StripId),
@@ -117,7 +115,7 @@ impl AutomationTarget {
 }
 
 /// An automation lane containing points for a single parameter
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct AutomationLane {
     pub id: AutomationLaneId,
     pub target: AutomationTarget,
@@ -232,7 +230,7 @@ impl AutomationLane {
 }
 
 /// Collection of automation lanes for a session
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default)]
 pub struct AutomationState {
     pub lanes: Vec<AutomationLane>,
     pub selected_lane: Option<usize>,

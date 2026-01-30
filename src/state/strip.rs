@@ -1,12 +1,10 @@
-use serde::{Deserialize, Serialize};
-
 use super::custom_synthdef::{CustomSynthDefId, CustomSynthDefRegistry};
 use super::param::{Param, ParamValue};
 use super::sampler::SamplerConfig;
 
 pub type StripId = u32;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OscType {
     Saw,
     Sin,
@@ -213,7 +211,7 @@ impl OscType {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FilterType {
     Lpf,
     Hpf,
@@ -243,7 +241,7 @@ impl FilterType {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EffectType {
     Delay,
     Reverb,
@@ -293,7 +291,7 @@ impl EffectType {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OutputTarget {
     Master,
     Bus(u8), // 1-8
@@ -305,7 +303,7 @@ impl Default for OutputTarget {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct MixerSend {
     pub bus_id: u8,
     pub level: f32,
@@ -318,7 +316,7 @@ impl MixerSend {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct MixerBus {
     pub id: u8,
     pub name: String,
@@ -341,7 +339,7 @@ impl MixerBus {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct EnvConfig {
     pub attack: f32,
     pub decay: f32,
@@ -355,7 +353,7 @@ impl Default for EnvConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct ModulatedParam {
     pub value: f32,
     pub min: f32,
@@ -363,14 +361,14 @@ pub struct ModulatedParam {
     pub mod_source: Option<ModSource>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub enum ModSource {
     Lfo(LfoConfig),
     Envelope(EnvConfig),
     StripParam(StripId, String),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LfoShape {
     Sine,
     Square,
@@ -432,7 +430,7 @@ impl LfoShape {
 //   Detune         - Add detune_mod_in to oscillators, slight pitch offset
 //   Attack         - Add attack_mod_in to oscillators (unusual but possible)
 //   Release        - Add release_mod_in to oscillators
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LfoTarget {
     FilterCutoff,
     FilterResonance,
@@ -514,7 +512,7 @@ impl LfoTarget {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct LfoConfig {
     pub enabled: bool,
     pub rate: f32,
@@ -535,7 +533,7 @@ impl Default for LfoConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct FilterConfig {
     pub filter_type: FilterType,
     pub cutoff: ModulatedParam,
@@ -552,7 +550,7 @@ impl FilterConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct EffectSlot {
     pub effect_type: EffectType,
     pub params: Vec<Param>,
@@ -571,7 +569,7 @@ impl EffectSlot {
 
 pub const MAX_BUSES: usize = 8;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct Strip {
     pub id: StripId,
     pub name: String,

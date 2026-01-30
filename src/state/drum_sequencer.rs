@@ -1,5 +1,3 @@
-use serde::{Deserialize, Serialize};
-
 use super::sampler::BufferId;
 
 pub const NUM_PADS: usize = 12;
@@ -8,7 +6,7 @@ pub const MAX_STEPS: usize = 64;
 pub const DEFAULT_STEPS: usize = 16;
 pub const NUM_PATTERNS: usize = 4;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct DrumStep {
     pub active: bool,
     pub velocity: u8, // 1-127, default 100
@@ -23,7 +21,7 @@ impl Default for DrumStep {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct DrumPad {
     pub buffer_id: Option<BufferId>,
     pub path: Option<String>,
@@ -42,7 +40,7 @@ impl Default for DrumPad {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct DrumPattern {
     pub steps: Vec<Vec<DrumStep>>, // [NUM_PADS][length]
     pub length: usize,
@@ -59,7 +57,7 @@ impl DrumPattern {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct DrumSequencerState {
     pub pads: Vec<DrumPad>,
     pub patterns: Vec<DrumPattern>,
@@ -67,7 +65,6 @@ pub struct DrumSequencerState {
     pub playing: bool,
     pub current_step: usize,
     pub next_buffer_id: BufferId,
-    #[serde(skip)]
     pub step_accumulator: f32,
 }
 

@@ -1,9 +1,7 @@
 #![allow(dead_code)]
 
-use serde::{Deserialize, Serialize};
-
 /// Musical key (pitch class)
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Key {
     C, Cs, D, Ds, E, F, Fs, G, Gs, A, As, B,
 }
@@ -33,7 +31,7 @@ impl Key {
 }
 
 /// Scale definition as intervals from root
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Scale {
     Major,
     Minor,

@@ -1,5 +1,3 @@
-use serde::{Deserialize, Serialize};
-
 use super::automation::AutomationState;
 use super::custom_synthdef::CustomSynthDefRegistry;
 use super::drum_sequencer::DrumSequencerState;
@@ -10,7 +8,7 @@ use super::strip::MixerBus;
 
 pub const MAX_BUSES: usize = 8;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MixerSelection {
     Strip(usize), // index into strips vec
     Bus(u8),      // 1-8
@@ -49,7 +47,7 @@ impl Default for MusicalSettings {
 
 /// Project-level state container.
 /// Owns musical settings, piano roll, automation, mixer buses, and other project data.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct SessionState {
     // Musical settings (flat, not nested)
     pub key: Key,

@@ -1,8 +1,6 @@
-use serde::{Deserialize, Serialize};
-
 use super::strip::*;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct StripState {
     pub strips: Vec<Strip>,
     pub selected: Option<usize>,

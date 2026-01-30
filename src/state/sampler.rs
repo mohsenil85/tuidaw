@@ -1,12 +1,10 @@
 #![allow(dead_code)]
 
-use serde::{Deserialize, Serialize};
-
 pub type BufferId = u32;
 pub type SliceId = u32;
 
 /// A loaded sample buffer
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct SampleBuffer {
     pub id: BufferId,
     pub path: String,
@@ -16,7 +14,6 @@ pub struct SampleBuffer {
     pub num_channels: u8,
     pub duration_secs: f32,
     /// SuperCollider buffer number (assigned when loaded)
-    #[serde(skip)]
     pub sc_bufnum: Option<i32>,
 }
 
@@ -44,7 +41,7 @@ impl SampleBuffer {
 }
 
 /// A slice within a sample buffer
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct Slice {
     pub id: SliceId,
     /// Start position as a fraction of the buffer (0.0-1.0)
@@ -79,7 +76,7 @@ impl Slice {
 }
 
 /// Sampler configuration for a strip
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct SamplerConfig {
     pub buffer_id: Option<BufferId>,
     pub slices: Vec<Slice>,
@@ -177,7 +174,7 @@ impl Default for SamplerConfig {
 }
 
 /// Global sample buffer registry
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default)]
 pub struct SampleRegistry {
     pub buffers: Vec<SampleBuffer>,
     next_buffer_id: BufferId,

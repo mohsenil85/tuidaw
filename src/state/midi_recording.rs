@@ -1,12 +1,10 @@
 #![allow(dead_code)]
 
-use serde::{Deserialize, Serialize};
-
 use super::automation::AutomationTarget;
 use super::strip::StripId;
 
 /// Recording mode for MIDI automation
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RecordMode {
     /// Not recording
     Off,
@@ -23,7 +21,7 @@ impl Default for RecordMode {
 }
 
 /// Mapping of a MIDI CC to an automation target
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct MidiCcMapping {
     /// MIDI CC number (0-127)
     pub cc_number: u8,
@@ -63,7 +61,7 @@ impl MidiCcMapping {
 }
 
 /// Pitch bend configuration for scratching
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct PitchBendConfig {
     /// Target parameter (usually SamplerRate for scratching)
     pub target: AutomationTarget,
@@ -93,7 +91,7 @@ impl PitchBendConfig {
 }
 
 /// State for MIDI recording and mapping
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default)]
 pub struct MidiRecordingState {
     /// Current recording mode
     pub record_mode: RecordMode,

@@ -1,10 +1,8 @@
 use std::collections::HashMap;
 
-use serde::{Deserialize, Serialize};
-
 use super::strip::StripId;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct Note {
     pub tick: u32,
     pub duration: u32,
@@ -12,14 +10,14 @@ pub struct Note {
     pub velocity: u8,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct Track {
     pub module_id: StripId,
     pub notes: Vec<Note>,
     pub polyphonic: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct PianoRollState {
     pub tracks: HashMap<StripId, Track>,
     pub track_order: Vec<StripId>,
