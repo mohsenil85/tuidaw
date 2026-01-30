@@ -23,20 +23,9 @@ pub struct InstrumentPane {
 }
 
 impl InstrumentPane {
-    pub fn new() -> Self {
+    pub fn new(keymap: Keymap) -> Self {
         Self {
-            keymap: Keymap::new()
-                .bind('q', "quit", "Quit the application")
-                .bind_key(KeyCode::Down, "next", "Next instrument")
-                .bind_key(KeyCode::Up, "prev", "Previous instrument")
-                .bind_key(KeyCode::Home, "goto_top", "Go to top")
-                .bind_key(KeyCode::End, "goto_bottom", "Go to bottom")
-                .bind('a', "add", "Add instrument")
-                .bind('d', "delete", "Delete instrument")
-                .bind_key(KeyCode::Enter, "edit", "Edit instrument")
-                .bind('w', "save", "Save")
-                .bind('o', "load", "Load")
-                .bind('/', "piano_mode", "Toggle piano keyboard mode"),
+            keymap,
             piano: PianoKeyboard::new(),
             pad_keyboard: PadKeyboard::new(),
         }
@@ -68,7 +57,7 @@ impl InstrumentPane {
 
 impl Default for InstrumentPane {
     fn default() -> Self {
-        Self::new()
+        Self::new(Keymap::new())
     }
 }
 

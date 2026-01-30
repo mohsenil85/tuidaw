@@ -1,7 +1,7 @@
 use std::any::Any;
 
 use crate::state::AppState;
-use crate::ui::{Action, Color, Graphics, InputEvent, KeyCode, Keymap, NavAction, Pane, Rect, Style};
+use crate::ui::{Action, Color, Graphics, InputEvent, Keymap, NavAction, Pane, Rect, Style};
 
 /// Menu item for the home screen
 struct MenuItem {
@@ -17,7 +17,7 @@ pub struct HomePane {
 }
 
 impl HomePane {
-    pub fn new() -> Self {
+    pub fn new(keymap: Keymap) -> Self {
         let items = vec![
             MenuItem {
                 label: "Instruments",
@@ -37,14 +37,7 @@ impl HomePane {
         ];
 
         Self {
-            keymap: Keymap::new()
-                .bind_key(KeyCode::Up, "up", "Previous item")
-                .bind_key(KeyCode::Down, "down", "Next item")
-                .bind('k', "up", "Previous item")
-                .bind('j', "down", "Next item")
-                .bind_key(KeyCode::Enter, "select", "Open selected pane")
-                .bind(' ', "select", "Open selected pane")
-                .bind('q', "quit", "Quit"),
+            keymap,
             selected: 0,
             items,
         }
@@ -53,7 +46,7 @@ impl HomePane {
 
 impl Default for HomePane {
     fn default() -> Self {
-        Self::new()
+        Self::new(Keymap::new())
     }
 }
 

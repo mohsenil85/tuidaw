@@ -27,15 +27,9 @@ pub struct FrameEditPane {
 }
 
 impl FrameEditPane {
-    pub fn new() -> Self {
+    pub fn new(keymap: Keymap) -> Self {
         Self {
-            keymap: Keymap::new()
-                .bind_key(KeyCode::Up, "prev", "Previous field")
-                .bind_key(KeyCode::Down, "next", "Next field")
-                .bind_key(KeyCode::Left, "decrease", "Decrease value")
-                .bind_key(KeyCode::Right, "increase", "Increase value")
-                .bind_key(KeyCode::Enter, "confirm", "Confirm changes")
-                .bind_key(KeyCode::Escape, "cancel", "Cancel"),
+            keymap,
             settings: MusicalSettings::default(),
             selected: 0,
             editing: false,
@@ -128,7 +122,7 @@ impl FrameEditPane {
 
 impl Default for FrameEditPane {
     fn default() -> Self {
-        Self::new()
+        Self::new(Keymap::new())
     }
 }
 

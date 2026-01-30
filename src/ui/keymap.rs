@@ -16,6 +16,8 @@ pub enum KeyPattern {
     /// Ctrl + special key
     #[allow(dead_code)]
     CtrlKey(KeyCode),
+    /// Shift + special key (arrows, Tab, etc.)
+    ShiftKey(KeyCode),
 }
 
 impl KeyPattern {
@@ -28,7 +30,7 @@ impl KeyPattern {
                     && !event.modifiers.alt
             }
             KeyPattern::Key(code) => {
-                event.key == *code && !event.modifiers.ctrl && !event.modifiers.alt
+                event.key == *code && !event.modifiers.ctrl && !event.modifiers.alt && !event.modifiers.shift
             }
             KeyPattern::Ctrl(ch) => {
                 matches!(event.key, KeyCode::Char(c) if c == *ch) && event.modifiers.ctrl
@@ -37,6 +39,7 @@ impl KeyPattern {
                 matches!(event.key, KeyCode::Char(c) if c == *ch) && event.modifiers.alt
             }
             KeyPattern::CtrlKey(code) => event.key == *code && event.modifiers.ctrl,
+            KeyPattern::ShiftKey(code) => event.key == *code && event.modifiers.shift,
         }
     }
 
@@ -48,6 +51,7 @@ impl KeyPattern {
             KeyPattern::Ctrl(ch) => format!("Ctrl+{}", ch),
             KeyPattern::Alt(ch) => format!("Alt+{}", ch),
             KeyPattern::CtrlKey(code) => format!("Ctrl+{:?}", code),
+            KeyPattern::ShiftKey(code) => format!("Shift+{:?}", code),
         }
     }
 }
@@ -73,8 +77,7 @@ pub struct KeyBinding {
 /// - `lookup(&InputEvent) -> Option<&str>` — match an event to its action
 /// - `bindings() -> &[KeyBinding]` — list all bindings (for help screens)
 ///
-/// No `bind_shift_key` variant exists. For shift detection, check
-/// `event.modifiers.shift` manually before keymap lookup.
+/// Use `bind_shift_key(KeyCode, action, desc)` for Shift + special key combos.
 #[derive(Debug, Clone, Default)]
 pub struct Keymap {
     bindings: Vec<KeyBinding>,
@@ -89,6 +92,7 @@ impl Keymap {
     }
 
     /// Add a character key binding
+    #[allow(dead_code)]
     pub fn bind(mut self, ch: char, action: &'static str, description: &'static str) -> Self {
         self.bindings.push(KeyBinding {
             pattern: KeyPattern::Char(ch),
@@ -99,6 +103,7 @@ impl Keymap {
     }
 
     /// Add a special key binding
+    #[allow(dead_code)]
     pub fn bind_key(
         mut self,
         key: KeyCode,
@@ -149,6 +154,27 @@ impl Keymap {
             description,
         });
         self
+    }
+
+    /// Add a Shift+key binding
+    #[allow(dead_code)]
+    pub fn bind_shift_key(
+        mut self,
+        key: KeyCode,
+        action: &'static str,
+        description: &'static str,
+    ) -> Self {
+        self.bindings.push(KeyBinding {
+            pattern: KeyPattern::ShiftKey(key),
+            action,
+            description,
+        });
+        self
+    }
+
+    /// Create a keymap from a pre-built list of bindings
+    pub fn from_bindings(bindings: Vec<KeyBinding>) -> Self {
+        Self { bindings }
     }
 
     /// Look up the action for an input event

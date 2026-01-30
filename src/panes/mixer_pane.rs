@@ -1,7 +1,7 @@
 use std::any::Any;
 
 use crate::state::{AppState, MixerSelection, OutputTarget};
-use crate::ui::{Action, Color, Graphics, InputEvent, KeyCode, Keymap, MixerAction, Pane, Rect, Style};
+use crate::ui::{Action, Color, Graphics, InputEvent, Keymap, MixerAction, Pane, Rect, Style};
 
 const CHANNEL_WIDTH: u16 = 8;
 const METER_HEIGHT: u16 = 12;
@@ -17,26 +17,9 @@ pub struct MixerPane {
 }
 
 impl MixerPane {
-    pub fn new() -> Self {
+    pub fn new(keymap: Keymap) -> Self {
         Self {
-            keymap: Keymap::new()
-                .bind_key(KeyCode::Left, "prev", "Previous channel")
-                .bind_key(KeyCode::Right, "next", "Next channel")
-                .bind_key(KeyCode::Home, "first", "First channel")
-                .bind_key(KeyCode::End, "last", "Last channel")
-                .bind_key(KeyCode::Up, "level_up", "Increase level")
-                .bind_key(KeyCode::Down, "level_down", "Decrease level")
-                .bind_key(KeyCode::PageUp, "level_up_big", "Increase level +10%")
-                .bind_key(KeyCode::PageDown, "level_down_big", "Decrease level -10%")
-                .bind('m', "mute", "Toggle mute")
-                .bind('s', "solo", "Toggle solo")
-                .bind('o', "output", "Cycle output target")
-                .bind('O', "output_rev", "Cycle output target backwards")
-                .bind_key(KeyCode::Tab, "section", "Cycle section")
-                .bind('t', "send_next", "Next send target")
-                .bind('T', "send_prev", "Previous send target")
-                .bind('g', "send_toggle", "Toggle selected send")
-                .bind_key(KeyCode::Escape, "clear_send", "Clear send selection"),
+            keymap,
             send_target: None,
         }
     }
@@ -109,7 +92,7 @@ impl MixerPane {
 
 impl Default for MixerPane {
     fn default() -> Self {
-        Self::new()
+        Self::new(Keymap::new())
     }
 }
 

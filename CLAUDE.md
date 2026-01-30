@@ -123,3 +123,11 @@ Configured as MCP server (`cclsp.json` + `.mcp.json`). Provides rust-analyzer ac
 - [docs/custom-synthdef-plan.md](docs/custom-synthdef-plan.md) — custom SynthDef import system
 - [docs/sqlite-persistence.md](docs/sqlite-persistence.md) — original schema design (partially outdated)
 - [docs/ai-integration.md](docs/ai-integration.md) — planned Haiku integration
+
+## Plans
+
+Save implementation plans in `./plans/` with descriptive filenames (e.g., `plans/midi-clock-sync.md`, `plans/sample-browser-redesign.md`). Use names that clearly describe the feature or change being planned.
+
+## Comment Box
+
+Log difficulties, friction points, or things that gave you trouble in `COMMENTBOX.md` at the project root. This helps identify recurring pain points and areas where the codebase or documentation could be improved.

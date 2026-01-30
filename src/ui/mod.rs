@@ -1,6 +1,7 @@
 pub mod frame;
 pub mod graphics;
 pub mod input;
+pub mod keybindings;
 pub mod keymap;
 pub mod pad_keyboard;
 pub mod pane;

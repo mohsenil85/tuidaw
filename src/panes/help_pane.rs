@@ -1,7 +1,7 @@
 use std::any::Any;
 
 use crate::state::AppState;
-use crate::ui::{Action, Color, Graphics, InputEvent, KeyCode, Keymap, NavAction, Pane, Rect, Style};
+use crate::ui::{Action, Color, Graphics, InputEvent, Keymap, NavAction, Pane, Rect, Style};
 
 pub struct HelpPane {
     keymap: Keymap,
@@ -16,17 +16,9 @@ pub struct HelpPane {
 }
 
 impl HelpPane {
-    pub fn new() -> Self {
+    pub fn new(keymap: Keymap) -> Self {
         Self {
-            keymap: Keymap::new()
-                .bind_key(KeyCode::Escape, "close", "Close help")
-                .bind('?', "close", "Close help")
-                .bind_key(KeyCode::Up, "up", "Scroll up")
-                .bind_key(KeyCode::Down, "down", "Scroll down")
-                .bind('k', "up", "Scroll up")
-                .bind('j', "down", "Scroll down")
-                .bind_key(KeyCode::Home, "top", "Go to top")
-                .bind_key(KeyCode::End, "bottom", "Go to bottom"),
+            keymap,
             display_keymap: Vec::new(),
             return_to: "instrument",
             title: String::new(),
@@ -51,7 +43,7 @@ impl HelpPane {
 
 impl Default for HelpPane {
     fn default() -> Self {
-        Self::new()
+        Self::new(Keymap::new())
     }
 }
 

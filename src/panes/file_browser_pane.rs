@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use crate::state::AppState;
 use crate::ui::{
-    Action, ChopperAction, Color, FileSelectAction, Graphics, InputEvent, KeyCode, Keymap, NavAction, Pane, Rect,
+    Action, ChopperAction, Color, FileSelectAction, Graphics, InputEvent, Keymap, NavAction, Pane, Rect,
     SequencerAction, SessionAction, Style,
 };
 
@@ -25,23 +25,12 @@ pub struct FileBrowserPane {
 }
 
 impl FileBrowserPane {
-    pub fn new() -> Self {
+    pub fn new(keymap: Keymap) -> Self {
         let start_dir = std::env::current_dir().unwrap_or_else(|_| {
             dirs::home_dir().unwrap_or_else(|| PathBuf::from("/"))
         });
         let mut pane = Self {
-            keymap: Keymap::new()
-                .bind_key(KeyCode::Enter, "select", "Select file/enter directory")
-                .bind_key(KeyCode::Escape, "cancel", "Cancel and return")
-                .bind_key(KeyCode::Backspace, "parent", "Go to parent directory")
-                .bind('h', "parent", "Go to parent directory")
-                .bind_key(KeyCode::Down, "next", "Next entry")
-                .bind('j', "next", "Next entry")
-                .bind_key(KeyCode::Up, "prev", "Previous entry")
-                .bind('k', "prev", "Previous entry")
-                .bind('~', "home", "Go to home directory")
-                .bind_key(KeyCode::Home, "goto_top", "Go to top")
-                .bind_key(KeyCode::End, "goto_bottom", "Go to bottom"),
+            keymap,
             current_dir: start_dir,
             entries: Vec::new(),
             selected: 0,
@@ -128,7 +117,7 @@ impl FileBrowserPane {
 
 impl Default for FileBrowserPane {
     fn default() -> Self {
-        Self::new()
+        Self::new(Keymap::new())
     }
 }
 

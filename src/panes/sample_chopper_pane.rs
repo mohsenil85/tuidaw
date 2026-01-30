@@ -3,7 +3,7 @@ use std::any::Any;
 use crate::panes::FileBrowserPane;
 use crate::state::AppState;
 use crate::ui::{
-    Action, ChopperAction, Color, FileSelectAction, Graphics, InputEvent, KeyCode, Keymap, NavAction, Pane, Rect, Style,
+    Action, ChopperAction, Color, FileSelectAction, Graphics, InputEvent, Keymap, NavAction, Pane, Rect, Style,
 };
 
 pub struct SampleChopperPane {
@@ -14,39 +14,12 @@ pub struct SampleChopperPane {
 }
 
 impl SampleChopperPane {
-    pub fn new() -> Self {
+    pub fn new(keymap: Keymap, file_browser_keymap: Keymap) -> Self {
         Self {
-            keymap: Keymap::new()
-                .bind('h', "move_left", "Move cursor left")
-                .bind_key(KeyCode::Left, "move_left", "Move cursor left")
-                .bind('l', "move_right", "Move cursor right")
-                .bind_key(KeyCode::Right, "move_right", "Move cursor right")
-                .bind('j', "next_slice", "Select next slice")
-                .bind_key(KeyCode::Down, "next_slice", "Select next slice")
-                .bind('k', "prev_slice", "Select previous slice")
-                .bind_key(KeyCode::Up, "prev_slice", "Select previous slice")
-                .bind_key(KeyCode::Enter, "chop", "Split slice at cursor")
-                .bind('x', "delete", "Remove selected slice")
-                .bind('n', "auto_slice", "Auto-slice (cycle 4/8/12/16)")
-                .bind('s', "load", "Load sample")
-                .bind(' ', "preview", "Preview slice")
-                .bind(',', "commit", "Commit all slices to pads")
-                .bind_key(KeyCode::Escape, "back", "Back to sequencer")
-                .bind('1', "assign_1", "Assign to Pad 1")
-                .bind('2', "assign_2", "Assign to Pad 2")
-                .bind('3', "assign_3", "Assign to Pad 3")
-                .bind('4', "assign_4", "Assign to Pad 4")
-                .bind('5', "assign_5", "Assign to Pad 5")
-                .bind('6', "assign_6", "Assign to Pad 6")
-                .bind('7', "assign_7", "Assign to Pad 7")
-                .bind('8', "assign_8", "Assign to Pad 8")
-                .bind('9', "assign_9", "Assign to Pad 9")
-                .bind('0', "assign_10", "Assign to Pad 10")
-                .bind('-', "assign_11", "Assign to Pad 11")
-                .bind('=', "assign_12", "Assign to Pad 12"),
+            keymap,
             cursor_pos: 0.5,
             auto_slice_n: 4,
-            file_browser: FileBrowserPane::new(),
+            file_browser: FileBrowserPane::new(file_browser_keymap),
         }
     }
 
@@ -69,7 +42,7 @@ impl SampleChopperPane {
 
 impl Default for SampleChopperPane {
     fn default() -> Self {
-        Self::new()
+        Self::new(Keymap::new(), Keymap::new())
     }
 }
 
@@ -81,14 +54,6 @@ impl Pane for SampleChopperPane {
     fn handle_input(&mut self, event: InputEvent, state: &AppState) -> Action {
         if self.should_show_file_browser(state) {
             return self.file_browser.handle_input(event, state);
-        }
-
-        if event.modifiers.shift {
-            match event.key {
-                KeyCode::Left => return Action::Chopper(ChopperAction::NudgeSliceStart(-0.005)),
-                KeyCode::Right => return Action::Chopper(ChopperAction::NudgeSliceEnd(0.005)),
-                _ => {}
-            }
         }
 
         match self.keymap.lookup(&event) {

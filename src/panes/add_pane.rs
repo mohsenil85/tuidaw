@@ -1,7 +1,7 @@
 use std::any::Any;
 
 use crate::state::{AppState, CustomSynthDefRegistry, OscType};
-use crate::ui::{Action, Color, FileSelectAction, Graphics, InputEvent, InstrumentAction, KeyCode, Keymap, NavAction, Pane, Rect, SessionAction, Style};
+use crate::ui::{Action, Color, FileSelectAction, Graphics, InputEvent, InstrumentAction, Keymap, NavAction, Pane, Rect, SessionAction, Style};
 
 /// Options available in the Add Instrument menu
 #[derive(Debug, Clone)]
@@ -19,15 +19,9 @@ pub struct AddPane {
 }
 
 impl AddPane {
-    pub fn new() -> Self {
+    pub fn new(keymap: Keymap) -> Self {
         Self {
-            keymap: Keymap::new()
-                .bind_key(KeyCode::Enter, "confirm", "Add selected instrument")
-                .bind_key(KeyCode::Escape, "cancel", "Cancel and return")
-                .bind_key(KeyCode::Down, "next", "Next")
-                .bind('j', "next", "Next")
-                .bind_key(KeyCode::Up, "prev", "Previous")
-                .bind('k', "prev", "Previous"),
+            keymap,
             selected: 0,
             cached_options: Self::build_options_static(),
         }
@@ -234,7 +228,7 @@ impl AddPane {
 
 impl Default for AddPane {
     fn default() -> Self {
-        Self::new()
+        Self::new(Keymap::new())
     }
 }
 

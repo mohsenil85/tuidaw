@@ -36,30 +36,9 @@ pub struct InstrumentEditPane {
 }
 
 impl InstrumentEditPane {
-    pub fn new() -> Self {
+    pub fn new(keymap: Keymap) -> Self {
         Self {
-            keymap: Keymap::new()
-                .bind_key(KeyCode::Escape, "done", "Done editing")
-                .bind('/', "piano_mode", "Toggle piano keyboard")
-                .bind_key(KeyCode::Down, "next", "Next item")
-                .bind_key(KeyCode::Up, "prev", "Previous item")
-                .bind_key(KeyCode::Tab, "next_section", "Next section")
-                .bind_key(KeyCode::Left, "decrease", "Decrease value")
-                .bind_key(KeyCode::Right, "increase", "Increase value")
-                .bind_key(KeyCode::PageUp, "increase_big", "Increase +10%")
-                .bind_key(KeyCode::PageDown, "decrease_big", "Decrease -10%")
-                .bind_key(KeyCode::Enter, "enter_edit", "Type value")
-                .bind('f', "toggle_filter", "Toggle filter on/off")
-                .bind('t', "cycle_filter_type", "Cycle filter type")
-                .bind('a', "add_effect", "Add effect")
-                .bind('d', "remove_effect", "Remove effect")
-                .bind('p', "toggle_poly", "Toggle polyphonic")
-                .bind('r', "toggle_track", "Toggle piano roll track")
-                .bind('\\', "zero_param", "Set param to zero")
-                .bind('|', "zero_section", "Zero all params in section")
-                .bind('l', "toggle_lfo", "Toggle LFO on/off")
-                .bind('s', "cycle_lfo_shape", "Cycle LFO shape")
-                .bind('m', "cycle_lfo_target", "Cycle LFO target"),
+            keymap,
             instrument_id: None,
             instrument_name: String::new(),
             source: OscType::Saw,
@@ -405,25 +384,6 @@ impl Pane for InstrumentEditPane {
     }
 
     fn handle_input(&mut self, event: InputEvent, _state: &AppState) -> Action {
-        // Handle Shift+Tab for prev_section (before other handlers)
-        if event.key == KeyCode::Tab && event.modifiers.shift {
-            let current = self.current_section();
-            let prev = match current {
-                Section::Source => Section::Envelope,
-                Section::Filter => Section::Source,
-                Section::Effects => Section::Filter,
-                Section::Lfo => Section::Effects,
-                Section::Envelope => Section::Lfo,
-            };
-            for i in 0..self.total_rows() {
-                if self.section_for_row(i) == prev {
-                    self.selected_row = i;
-                    break;
-                }
-            }
-            return Action::None;
-        }
-
         // Piano mode
         if self.piano.is_active() {
             match event.key {
@@ -945,7 +905,7 @@ impl Pane for InstrumentEditPane {
 
 impl Default for InstrumentEditPane {
     fn default() -> Self {
-        Self::new()
+        Self::new(Keymap::new())
     }
 }
 

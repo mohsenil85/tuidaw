@@ -39,31 +39,9 @@ pub struct PianoRollPane {
 }
 
 impl PianoRollPane {
-    pub fn new() -> Self {
+    pub fn new(keymap: Keymap) -> Self {
         Self {
-            keymap: Keymap::new()
-                .bind_key(KeyCode::Up, "up", "Cursor up (higher pitch)")
-                .bind_key(KeyCode::Down, "down", "Cursor down (lower pitch)")
-                .bind_key(KeyCode::Left, "left", "Cursor left (earlier)")
-                .bind_key(KeyCode::Right, "right", "Cursor later (later)")
-                .bind_key(KeyCode::Enter, "toggle_note", "Place/remove note")
-                .bind_key(KeyCode::Tab, "piano_mode", "Toggle piano keyboard mode")
-                .bind('+', "vel_up", "Increase velocity")
-                .bind('-', "vel_down", "Decrease velocity")
-                .bind(' ', "play_stop", "Play / Stop")
-                .bind('l', "loop", "Toggle loop")
-                .bind('[', "loop_start", "Set loop start")
-                .bind(']', "loop_end", "Set loop end")
-                .bind('<', "prev_track", "Previous track")
-                .bind('>', "next_track", "Next track")
-                .bind_key(KeyCode::PageUp, "octave_up", "Scroll up one octave")
-                .bind_key(KeyCode::PageDown, "octave_down", "Scroll down one octave")
-                .bind_key(KeyCode::Home, "home", "Jump to start")
-                .bind_key(KeyCode::End, "end", "Jump to end")
-                .bind('z', "zoom_in", "Zoom in (time)")
-                .bind('x', "zoom_out", "Zoom out (time)")
-                .bind('t', "time_sig", "Cycle time signature")
-                .bind('m', "toggle_poly", "Toggle poly/mono mode"),
+            keymap,
             cursor_pitch: 60, // C4
             cursor_tick: 0,
             current_track: 0,
@@ -453,7 +431,7 @@ impl PianoRollPane {
 
 impl Default for PianoRollPane {
     fn default() -> Self {
-        Self::new()
+        Self::new(Keymap::new())
     }
 }
 
@@ -463,15 +441,6 @@ impl Pane for PianoRollPane {
     }
 
     fn handle_input(&mut self, event: InputEvent, _state: &AppState) -> Action {
-        // Handle shift+arrow for duration adjustment (before keymap, since keymap doesn't support shift)
-        if event.modifiers.shift {
-            match event.key {
-                KeyCode::Right => return Action::PianoRoll(PianoRollAction::AdjustDuration(self.ticks_per_cell() as i32)),
-                KeyCode::Left => return Action::PianoRoll(PianoRollAction::AdjustDuration(-(self.ticks_per_cell() as i32))),
-                _ => {}
-            }
-        }
-
         // Piano mode: letter keys play notes, minimal other keys work
         if self.piano.is_active() {
             match event.key {
@@ -530,8 +499,8 @@ impl Pane for PianoRollPane {
                 Action::None
             }
             Some("toggle_note") => Action::PianoRoll(PianoRollAction::ToggleNote),
-            Some("grow") => Action::PianoRoll(PianoRollAction::AdjustDuration(self.ticks_per_cell() as i32)),
-            Some("shrink") => Action::PianoRoll(PianoRollAction::AdjustDuration(-(self.ticks_per_cell() as i32))),
+            Some("grow_duration") => Action::PianoRoll(PianoRollAction::AdjustDuration(self.ticks_per_cell() as i32)),
+            Some("shrink_duration") => Action::PianoRoll(PianoRollAction::AdjustDuration(-(self.ticks_per_cell() as i32))),
             Some("vel_up") => Action::PianoRoll(PianoRollAction::AdjustVelocity(10)),
             Some("vel_down") => Action::PianoRoll(PianoRollAction::AdjustVelocity(-10)),
             Some("play_stop") => Action::PianoRoll(PianoRollAction::PlayStop),

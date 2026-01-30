@@ -2,7 +2,7 @@ use std::any::Any;
 
 use crate::state::drum_sequencer::NUM_PADS;
 use crate::state::AppState;
-use crate::ui::{Action, Color, Graphics, InputEvent, KeyCode, Keymap, NavAction, Pane, Rect, SequencerAction, Style};
+use crate::ui::{Action, Color, Graphics, InputEvent, Keymap, NavAction, Pane, Rect, SequencerAction, Style};
 
 pub struct SequencerPane {
     keymap: Keymap,
@@ -12,26 +12,9 @@ pub struct SequencerPane {
 }
 
 impl SequencerPane {
-    pub fn new() -> Self {
+    pub fn new(keymap: Keymap) -> Self {
         Self {
-            keymap: Keymap::new()
-                .bind_key(KeyCode::Up, "up", "Previous pad")
-                .bind_key(KeyCode::Down, "down", "Next pad")
-                .bind_key(KeyCode::Left, "left", "Previous step")
-                .bind_key(KeyCode::Right, "right", "Next step")
-                .bind('j', "down", "Next pad")
-                .bind('k', "up", "Previous pad")
-                .bind('h', "left", "Previous step")
-                .bind('l', "right", "Next step")
-                .bind_key(KeyCode::Enter, "toggle", "Toggle step")
-                .bind(' ', "play_stop", "Play/stop")
-                .bind('s', "load_sample", "Load sample for pad")
-                .bind('c', "chopper", "Sample chopper")
-                .bind('x', "clear_pad", "Clear pad steps")
-                .bind_ctrl('c', "clear_pattern", "Clear pattern")
-                .bind('[', "prev_pattern", "Previous pattern")
-                .bind(']', "next_pattern", "Next pattern")
-                .bind('{', "cycle_length", "Cycle pattern length"),
+            keymap,
             cursor_pad: 0,
             cursor_step: 0,
             view_start_step: 0,
@@ -48,7 +31,7 @@ impl SequencerPane {
 
 impl Default for SequencerPane {
     fn default() -> Self {
-        Self::new()
+        Self::new(Keymap::new())
     }
 }
 
@@ -64,40 +47,33 @@ impl Pane for SequencerPane {
         };
         let pattern_length = seq.pattern().length;
 
-        // Manual shift checks before keymap lookup
-        if event.modifiers.shift {
-            match event.key {
-                KeyCode::Up => {
-                    return Action::Sequencer(SequencerAction::AdjustVelocity(
-                        self.cursor_pad,
-                        self.cursor_step,
-                        10,
-                    ));
-                }
-                KeyCode::Down => {
-                    return Action::Sequencer(SequencerAction::AdjustVelocity(
-                        self.cursor_pad,
-                        self.cursor_step,
-                        -10,
-                    ));
-                }
-                KeyCode::Left => {
-                    return Action::Sequencer(SequencerAction::AdjustPadLevel(
-                        self.cursor_pad,
-                        -0.05,
-                    ));
-                }
-                KeyCode::Right => {
-                    return Action::Sequencer(SequencerAction::AdjustPadLevel(
-                        self.cursor_pad,
-                        0.05,
-                    ));
-                }
-                _ => {}
-            }
-        }
-
         match self.keymap.lookup(&event) {
+            Some("vel_up") => {
+                return Action::Sequencer(SequencerAction::AdjustVelocity(
+                    self.cursor_pad,
+                    self.cursor_step,
+                    10,
+                ));
+            }
+            Some("vel_down") => {
+                return Action::Sequencer(SequencerAction::AdjustVelocity(
+                    self.cursor_pad,
+                    self.cursor_step,
+                    -10,
+                ));
+            }
+            Some("pad_level_down") => {
+                return Action::Sequencer(SequencerAction::AdjustPadLevel(
+                    self.cursor_pad,
+                    -0.05,
+                ));
+            }
+            Some("pad_level_up") => {
+                return Action::Sequencer(SequencerAction::AdjustPadLevel(
+                    self.cursor_pad,
+                    0.05,
+                ));
+            }
             Some("up") => {
                 self.cursor_pad = self.cursor_pad.saturating_sub(1);
                 Action::None

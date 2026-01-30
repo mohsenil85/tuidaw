@@ -12,15 +12,9 @@ pub struct ServerPane {
 }
 
 impl ServerPane {
-    pub fn new() -> Self {
+    pub fn new(keymap: Keymap) -> Self {
         Self {
-            keymap: Keymap::new()
-                .bind('s', "start", "Start scsynth")
-                .bind('k', "stop", "Kill scsynth")
-                .bind('c', "connect", "Connect to server")
-                .bind('d', "disconnect", "Disconnect")
-                .bind('b', "compile", "Build synthdefs")
-                .bind('l', "load", "Load synthdefs"),
+            keymap,
             status: ServerStatus::Stopped,
             message: String::new(),
             server_running: false,
@@ -39,7 +33,7 @@ impl ServerPane {
 
 impl Default for ServerPane {
     fn default() -> Self {
-        Self::new()
+        Self::new(Keymap::new())
     }
 }
 
