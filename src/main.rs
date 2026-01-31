@@ -165,14 +165,10 @@ fn run(backend: &mut RatatuiBackend) -> std::io::Result<()> {
             app_frame.set_master_peak(peak, mute);
         }
 
-        // Update waveform cache for piano roll
-        if panes.active().id() == "piano_roll" {
-            let track = panes.get_pane_mut::<PianoRollPane>("piano_roll")
-                .map(|p| p.current_track()).unwrap_or(0);
-            state.audio_in_waveform = state.session.piano_roll
-                .track_at(track)
-                .and_then(|t| state.instruments.instrument(t.module_id))
-                .filter(|s| s.source.is_audio_input())
+        // Update waveform cache for waveform pane
+        if panes.active().id() == "waveform" {
+            state.audio_in_waveform = state.instruments.selected_instrument()
+                .filter(|s| s.source.is_audio_input() || s.source.is_bus_in())
                 .map(|s| audio_engine.audio_in_waveform(s.id));
         } else {
             state.audio_in_waveform = None;

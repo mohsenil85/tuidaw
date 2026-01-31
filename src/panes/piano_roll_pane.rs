@@ -10,9 +10,6 @@ use crate::state::AppState;
 use crate::ui::layout_helpers::center_rect;
 use crate::ui::{Action, Color, InputEvent, KeyCode, Keymap, Pane, PianoKeyboard, PianoRollAction, Style};
 
-/// Waveform display characters (8 levels)
-const WAVEFORM_CHARS: [char; 8] = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
-
 /// MIDI note name for a given pitch (0-127)
 fn note_name(pitch: u8) -> String {
     let names = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
@@ -145,106 +142,6 @@ impl PianoRollPane {
         self.view_bottom_pitch = base_pitch.saturating_sub(visible_rows / 2);
         // Also move cursor to the base note of this octave
         self.cursor_pitch = base_pitch;
-    }
-
-    /// Render waveform for audio input tracks (buffer version)
-    fn render_audio_input_buf(&self, buf: &mut Buffer, area: RatatuiRect, piano_roll: &PianoRollState, waveform: &[f32]) {
-        let rect = center_rect(area, 97, 29);
-
-        let header_height: u16 = 2;
-        let footer_height: u16 = 2;
-        let grid_x = rect.x + 1;
-        let grid_y = rect.y + header_height;
-        let grid_width = rect.width.saturating_sub(2);
-        let grid_height = rect.height.saturating_sub(header_height + footer_height + 1);
-
-        // Border with AudioIn label
-        let track_label = if let Some(track) = piano_roll.track_at(self.current_track) {
-            format!(
-                " Audio Input: instrument-{} [{}/{}] ",
-                track.module_id,
-                self.current_track + 1,
-                piano_roll.track_order.len(),
-            )
-        } else {
-            " Audio Input: (no tracks) ".to_string()
-        };
-        let block = Block::default()
-            .borders(Borders::ALL)
-            .title(track_label.as_str())
-            .border_style(ratatui::style::Style::from(Style::new().fg(Color::AUDIO_IN_COLOR)))
-            .title_style(ratatui::style::Style::from(Style::new().fg(Color::AUDIO_IN_COLOR)));
-        block.render(rect, buf);
-
-        // Header: transport info
-        let header_y = rect.y + 1;
-        let play_icon = if piano_roll.playing { "||" } else { "> " };
-        let header_text = format!(
-            " BPM:{:.0}  {}  Waveform Display",
-            piano_roll.bpm,
-            play_icon,
-        );
-        Paragraph::new(Line::from(Span::styled(
-            header_text,
-            ratatui::style::Style::from(Style::new().fg(Color::WHITE)),
-        ))).render(RatatuiRect::new(rect.x + 1, header_y, rect.width.saturating_sub(2), 1), buf);
-
-        // Waveform display area
-        let center_y = grid_y + grid_height / 2;
-        let half_height = (grid_height / 2) as f32;
-
-        // Draw center line
-        let dark_gray = ratatui::style::Style::from(Style::new().fg(Color::DARK_GRAY));
-        for x in 0..grid_width {
-            if let Some(cell) = buf.cell_mut((grid_x + x, center_y)) {
-                cell.set_char('─').set_style(dark_gray);
-            }
-        }
-
-        // Draw waveform
-        let audio_in_style = ratatui::style::Style::from(Style::new().fg(Color::AUDIO_IN_COLOR));
-        let waveform_len = waveform.len();
-        for col in 0..grid_width as usize {
-            let sample_idx = if waveform_len > 0 {
-                (col * waveform_len / grid_width as usize).min(waveform_len - 1)
-            } else {
-                0
-            };
-
-            let amplitude = if sample_idx < waveform_len {
-                waveform[sample_idx].abs().min(1.0)
-            } else {
-                0.0
-            };
-
-            let bar_height = (amplitude * half_height) as u16;
-
-            for dy in 0..bar_height.min(grid_height / 2) {
-                let y = center_y.saturating_sub(dy + 1);
-                let char_idx = ((amplitude * 7.0) as usize).min(7);
-                if let Some(cell) = buf.cell_mut((grid_x + col as u16, y)) {
-                    cell.set_char(WAVEFORM_CHARS[char_idx]).set_style(audio_in_style);
-                }
-            }
-
-            for dy in 0..bar_height.min(grid_height / 2) {
-                let y = center_y + dy + 1;
-                if y < grid_y + grid_height {
-                    let char_idx = ((amplitude * 7.0) as usize).min(7);
-                    if let Some(cell) = buf.cell_mut((grid_x + col as u16, y)) {
-                        cell.set_char(WAVEFORM_CHARS[char_idx]).set_style(audio_in_style);
-                    }
-                }
-            }
-        }
-
-        // Status line
-        let status_y = grid_y + grid_height;
-        let status = format!("Samples: {}  Use < > to switch tracks", waveform_len);
-        Paragraph::new(Line::from(Span::styled(
-            status,
-            ratatui::style::Style::from(Style::new().fg(Color::GRAY)),
-        ))).render(RatatuiRect::new(rect.x + 1, status_y, rect.width.saturating_sub(2), 1), buf);
     }
 
     /// Render notes grid (buffer version)
@@ -581,18 +478,8 @@ impl Pane for PianoRollPane {
     }
 
     fn render(&self, area: RatatuiRect, buf: &mut Buffer, state: &AppState) {
-        let piano_roll = &state.session.piano_roll;
-        let current_instrument_id = piano_roll.track_at(self.current_track).map(|t| t.module_id);
-        let is_audio_in = current_instrument_id
-            .and_then(|id| state.instruments.instrument(id))
-            .map(|s| s.source.is_audio_input() || s.source.is_bus_in())
-            .unwrap_or(false);
-
-        if is_audio_in {
-            self.render_audio_input_buf(buf, area, piano_roll, state.audio_in_waveform.as_deref().unwrap_or(&[]));
-        } else {
-            self.render_notes_buf(buf, area, piano_roll);
-        }    }
+        self.render_notes_buf(buf, area, &state.session.piano_roll);
+    }
 
     fn keymap(&self) -> &Keymap {
         &self.keymap
