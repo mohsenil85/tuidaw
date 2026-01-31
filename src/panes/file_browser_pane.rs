@@ -10,7 +10,7 @@ use ratatui::widgets::{Block, Borders, Paragraph, Widget};
 use crate::state::AppState;
 use crate::ui::layout_helpers::center_rect;
 use crate::ui::{
-    Action, ChopperAction, Color, FileSelectAction, InputEvent, Keymap, MouseEvent,
+    Action, ChopperAction, Color, FileSelectAction, InputEvent, InstrumentAction, Keymap, MouseEvent,
     MouseEventKind, MouseButton, NavAction, Pane, SequencerAction, SessionAction, Style,
 };
 
@@ -28,6 +28,7 @@ pub struct FileBrowserPane {
     filter_extensions: Option<Vec<String>>,
     on_select_action: FileSelectAction,
     scroll_offset: usize,
+    show_hidden: bool,
 }
 
 impl FileBrowserPane {
@@ -43,6 +44,7 @@ impl FileBrowserPane {
             filter_extensions: Some(vec!["scd".to_string()]),
             on_select_action: FileSelectAction::ImportCustomSynthDef,
             scroll_offset: 0,
+            show_hidden: false,
         };
         pane.refresh_entries();
         pane
@@ -53,7 +55,7 @@ impl FileBrowserPane {
         self.on_select_action = action.clone();
         self.filter_extensions = match action {
             FileSelectAction::ImportCustomSynthDef => Some(vec!["scd".to_string()]),
-            FileSelectAction::LoadDrumSample(_) | FileSelectAction::LoadChopperSample => {
+            FileSelectAction::LoadDrumSample(_) | FileSelectAction::LoadChopperSample | FileSelectAction::LoadPitchedSample(_) => {
                 Some(vec!["wav".to_string(), "aiff".to_string(), "aif".to_string()])
             }
         };
@@ -79,7 +81,7 @@ impl FileBrowserPane {
                 let name = entry.file_name().to_string_lossy().to_string();
 
                 // Skip hidden files
-                if name.starts_with('.') {
+                if !self.show_hidden && name.starts_with('.') {
                     continue;
                 }
 
@@ -154,6 +156,9 @@ impl Pane for FileBrowserPane {
                             FileSelectAction::LoadChopperSample => {
                                 Action::Chopper(ChopperAction::LoadSampleResult(entry.path.clone()))
                             }
+                            FileSelectAction::LoadPitchedSample(id) => {
+                                Action::Instrument(InstrumentAction::LoadSampleResult(id, entry.path.clone()))
+                            }
                         }
                     }
                 } else {
@@ -200,6 +205,11 @@ impl Pane for FileBrowserPane {
                 }
                 Action::None
             }
+            "toggle_hidden" => {
+                self.show_hidden = !self.show_hidden;
+                self.refresh_entries();
+                Action::None
+            }
             _ => Action::None,
         }
     }
@@ -210,6 +220,7 @@ impl Pane for FileBrowserPane {
         let title = match self.on_select_action {
             FileSelectAction::ImportCustomSynthDef => " Import Custom SynthDef ",
             FileSelectAction::LoadDrumSample(_) | FileSelectAction::LoadChopperSample => " Load Sample ",
+            FileSelectAction::LoadPitchedSample(_) => " Load Sample ",
         };
         let block = Block::default()
             .borders(Borders::ALL)
@@ -335,7 +346,7 @@ impl Pane for FileBrowserPane {
         let help_y = rect.y + rect.height - 2;
         if help_y < area.y + area.height {
             Paragraph::new(Line::from(Span::styled(
-                "Enter: select | Backspace: parent | ~: home | Esc: cancel",
+                "Enter: select | Backspace: parent | ~: home | &: hidden | Esc: cancel",
                 ratatui::style::Style::from(Style::new().fg(Color::DARK_GRAY)),
             ))).render(RatatuiRect::new(content_x, help_y, inner.width.saturating_sub(2), 1), buf);
         }
@@ -385,6 +396,12 @@ impl Pane for FileBrowserPane {
                                     }
                                     FileSelectAction::LoadChopperSample => {
                                         return Action::Chopper(ChopperAction::LoadSampleResult(
+                                            self.entries[clicked_idx].path.clone(),
+                                        ));
+                                    }
+                                    FileSelectAction::LoadPitchedSample(id) => {
+                                        return Action::Instrument(InstrumentAction::LoadSampleResult(
+                                            id,
                                             self.entries[clicked_idx].path.clone(),
                                         ));
                                     }

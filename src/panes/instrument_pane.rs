@@ -16,7 +16,7 @@ fn source_color(source: SourceType) -> Color {
         SourceType::Sqr => Color::OSC_COLOR,
         SourceType::Tri => Color::OSC_COLOR,
         SourceType::AudioIn => Color::AUDIO_IN_COLOR,
-        SourceType::Sample => Color::SAMPLE_COLOR,
+        SourceType::PitchedSampler => Color::SAMPLE_COLOR,
         SourceType::Kit => Color::KIT_COLOR,
         SourceType::BusIn => Color::BUS_IN_COLOR,
         SourceType::Custom(_) => Color::CUSTOM_COLOR,

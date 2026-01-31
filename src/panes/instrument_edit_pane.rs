@@ -11,7 +11,7 @@ use crate::state::{
 };
 use crate::ui::layout_helpers::center_rect;
 use crate::ui::widgets::TextInput;
-use crate::ui::{Action, Color, InputEvent, KeyCode, Keymap, MouseEvent, MouseEventKind, Pane, PianoKeyboard, InstrumentAction, Style, ToggleResult, translate_key};
+use crate::ui::{Action, Color, FileSelectAction, InputEvent, KeyCode, Keymap, MouseEvent, MouseEventKind, Pane, PianoKeyboard, InstrumentAction, SessionAction, Style, ToggleResult, translate_key};
 
 /// Which section a row belongs to
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -34,6 +34,7 @@ pub struct InstrumentEditPane {
     lfo: LfoConfig,
     amp_envelope: EnvConfig,
     polyphonic: bool,
+    active: bool,
     selected_row: usize,
     editing: bool,
     edit_input: TextInput,
@@ -53,6 +54,7 @@ impl InstrumentEditPane {
             lfo: LfoConfig::default(),
             amp_envelope: EnvConfig::default(),
             polyphonic: true,
+            active: true,
             selected_row: 0,
             editing: false,
             edit_input: TextInput::new(""),
@@ -70,6 +72,7 @@ impl InstrumentEditPane {
         self.lfo = instrument.lfo.clone();
         self.amp_envelope = instrument.amp_envelope.clone();
         self.polyphonic = instrument.polyphonic;
+        self.active = instrument.active;
         self.selected_row = 0;
     }
 
@@ -118,6 +121,7 @@ impl InstrumentEditPane {
         instrument.lfo = self.lfo.clone();
         instrument.amp_envelope = self.amp_envelope.clone();
         instrument.polyphonic = self.polyphonic;
+        instrument.active = self.active;
     }
 
     /// Total number of selectable rows across all sections
@@ -589,6 +593,25 @@ impl Pane for InstrumentEditPane {
                 self.polyphonic = !self.polyphonic;
                 self.emit_update()
             }
+            "toggle_active" => {
+                if self.source.is_audio_input() {
+                    self.active = !self.active;
+                    self.emit_update()
+                } else {
+                    Action::None
+                }
+            }
+            "load_sample" => {
+                if self.source.is_sample() {
+                    if let Some(id) = self.instrument_id {
+                        Action::Session(SessionAction::OpenFileBrowser(FileSelectAction::LoadPitchedSample(id)))
+                    } else {
+                        Action::None
+                    }
+                } else {
+                    Action::None
+                }
+            }
             "zero_param" => {
                 self.zero_current_param();
                 self.emit_update()
@@ -677,6 +700,17 @@ impl Pane for InstrumentEditPane {
         let poly_str = if self.polyphonic { " POLY " } else { " MONO " };
         Paragraph::new(Line::from(Span::styled(poly_str, poly_style)))
             .render(RatatuiRect::new(mode_x, rect.y, 6, 1), buf);
+
+        // Active/Inactive indicator for AudioIn instruments
+        if self.source.is_audio_input() {
+            let active_style = ratatui::style::Style::from(Style::new().fg(
+                if self.active { Color::LIME } else { Color::new(220, 40, 40) }
+            ));
+            let active_str = if self.active { " ACTIVE " } else { " INACTIVE " };
+            let active_x = mode_x.saturating_sub(active_str.len() as u16 + 1);
+            Paragraph::new(Line::from(Span::styled(active_str, active_style)))
+                .render(RatatuiRect::new(active_x, rect.y, active_str.len() as u16, 1), buf);
+        }
 
         // Piano mode indicator
         if self.piano.is_active() {

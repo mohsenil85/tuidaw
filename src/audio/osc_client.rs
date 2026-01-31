@@ -241,6 +241,26 @@ impl OscClient {
         self.send_message("/b_free", vec![OscType::Int(bufnum)])
     }
 
+    /// /b_write bufnum path headerFormat sampleFormat numFrames startFrame leaveOpen
+    /// Open a buffer for disk writing (WAV, 32-bit float, leave open for streaming)
+    pub fn open_buffer_for_write(&self, bufnum: i32, path: &str) -> std::io::Result<()> {
+        self.send_message("/b_write", vec![
+            OscType::Int(bufnum),
+            OscType::String(path.to_string()),
+            OscType::String("wav".to_string()),
+            OscType::String("float".to_string()),
+            OscType::Int(0),  // numFrames (0 = all)
+            OscType::Int(0),  // startFrame
+            OscType::Int(1),  // leaveOpen = 1
+        ])
+    }
+
+    /// /b_close bufnum
+    /// Close a buffer's soundfile (after DiskOut recording)
+    pub fn close_buffer(&self, bufnum: i32) -> std::io::Result<()> {
+        self.send_message("/b_close", vec![OscType::Int(bufnum)])
+    }
+
     /// /b_query bufnum
     /// Query buffer info (results come back asynchronously via /b_info)
     #[allow(dead_code)]

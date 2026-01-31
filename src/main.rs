@@ -236,13 +236,35 @@ fn run(backend: &mut RatatuiBackend) -> std::io::Result<()> {
             app_frame.set_master_peak(peak, mute);
         }
 
+        // Update recording state
+        state.recording = audio_engine.is_recording();
+        state.recording_secs = audio_engine.recording_elapsed()
+            .map(|d| d.as_secs()).unwrap_or(0);
+        app_frame.recording = state.recording;
+        app_frame.recording_secs = state.recording_secs;
+
+        // Deferred recording buffer free + waveform load
+        // Wait for scsynth to flush the WAV file before reading it
+        if audio_engine.poll_pending_buffer_free() {
+            if let Some(path) = state.pending_recording_path.take() {
+                let peaks = dispatch::compute_waveform_peaks(&path.to_string_lossy()).0;
+                if !peaks.is_empty() {
+                    state.recorded_waveform = Some(peaks);
+                    panes.switch_to("waveform", &state);
+                }
+            }
+        }
+
         // Update waveform cache for waveform pane
         if panes.active().id() == "waveform" {
-            state.audio_in_waveform = state.instruments.selected_instrument()
-                .filter(|s| s.source.is_audio_input() || s.source.is_bus_in())
-                .map(|s| audio_engine.audio_in_waveform(s.id));
+            if state.recorded_waveform.is_none() {
+                state.audio_in_waveform = state.instruments.selected_instrument()
+                    .filter(|s| s.source.is_audio_input() || s.source.is_bus_in())
+                    .map(|s| audio_engine.audio_in_waveform(s.id));
+            }
         } else {
             state.audio_in_waveform = None;
+            state.recorded_waveform = None;
         }
 
         // Render
@@ -385,6 +407,9 @@ fn handle_global_action(
             if audio_engine.is_running() {
                 let _ = audio_engine.update_all_instrument_mixer_params(&state.instruments, &state.session);
             }
+        }
+        "record_master" => {
+            dispatch::dispatch_action(&Action::Server(ui::ServerAction::RecordMaster), state, panes, audio_engine, app_frame, active_notes);
         }
         "switch:instrument" => {
             switch_to_pane("instrument", panes, state, app_frame, layer_stack);

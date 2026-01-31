@@ -29,6 +29,10 @@ pub struct Frame {
     pub view_history: Vec<ViewState>,
     /// Current position in view_history
     pub history_cursor: usize,
+    /// Whether audio is currently being recorded
+    pub recording: bool,
+    /// Elapsed recording time in seconds
+    pub recording_secs: u64,
 }
 
 impl Frame {
@@ -40,6 +44,8 @@ impl Frame {
             peak_display: 0.0,
             view_history: Vec::new(),
             history_cursor: 0,
+            recording: false,
+            recording_secs: 0,
         }
     }
 
@@ -107,11 +113,38 @@ impl Frame {
         Paragraph::new(Line::from(Span::styled(&header, header_style)))
             .render(RatatuiRect::new(area.x + 1, area.y, area.width.saturating_sub(2), 1), buf);
 
-        // Fill remaining top border after header
+        // Recording indicator (right-aligned in header)
+        let rec_text = if self.recording {
+            let mins = self.recording_secs / 60;
+            let secs = self.recording_secs % 60;
+            format!(" REC {:02}:{:02} ", mins, secs)
+        } else {
+            String::new()
+        };
+
+        // Fill remaining top border after header (leave room for REC indicator)
         let header_end = area.x + 1 + header.len() as u16;
-        for x in header_end..area.x + area.width.saturating_sub(1) {
+        let rec_start = if self.recording {
+            area.x + area.width.saturating_sub(1 + rec_text.len() as u16)
+        } else {
+            area.x + area.width.saturating_sub(1)
+        };
+        for x in header_end..rec_start {
             if let Some(cell) = buf.cell_mut((x, area.y)) {
                 cell.set_char('─').set_style(border_style);
+            }
+        }
+
+        // Render REC indicator
+        if self.recording {
+            let rec_style = ratatui::style::Style::from(Style::new().fg(Color::MUTE_COLOR).bold());
+            for (j, ch) in rec_text.chars().enumerate() {
+                let rx = rec_start + j as u16;
+                if rx < area.x + area.width.saturating_sub(1) {
+                    if let Some(cell) = buf.cell_mut((rx, area.y)) {
+                        cell.set_char(ch).set_style(rec_style);
+                    }
+                }
             }
         }
 

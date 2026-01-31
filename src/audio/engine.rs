@@ -6,6 +6,14 @@ use std::sync::mpsc::{self, Receiver};
 use std::thread;
 use std::time::{Duration, Instant};
 
+/// State for an active disk recording session
+struct RecordingState {
+    bufnum: i32,
+    node_id: i32,
+    path: PathBuf,
+    started_at: Instant,
+}
+
 use super::bus_allocator::BusAllocator;
 use super::osc_client::OscClient;
 use crate::state::{AutomationTarget, BufferId, CustomSynthDefRegistry, EffectType, FilterType, SourceType, ParamValue, SessionState, InstrumentId, InstrumentState};
@@ -17,6 +25,7 @@ pub type ModuleId = u32;
 pub const GROUP_SOURCES: i32 = 100;
 pub const GROUP_PROCESSING: i32 = 200;
 pub const GROUP_OUTPUT: i32 = 300;
+pub const GROUP_RECORD: i32 = 400;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ServerStatus {
@@ -92,6 +101,10 @@ pub struct AudioEngine {
     /// Next available buffer number for SuperCollider
     #[allow(dead_code)]
     next_bufnum: i32,
+    /// Active disk recording session
+    recording: Option<RecordingState>,
+    /// Buffer pending free after recording stop (bufnum, when to free)
+    pending_buffer_free: Option<(i32, Instant)>,
 }
 
 impl AudioEngine {
@@ -116,6 +129,8 @@ impl AudioEngine {
             meter_node_id: None,
             buffer_map: HashMap::new(),
             next_bufnum: 100, // Start at 100 to avoid conflicts with built-in buffers
+            recording: None,
+            pending_buffer_free: None,
         }
     }
 
@@ -277,6 +292,7 @@ impl AudioEngine {
     }
 
     pub fn stop_server(&mut self) {
+        self.stop_recording();
         self.disconnect();
         if let Some(mut child) = self.scsynth_process.take() {
             let _ = child.kill();
@@ -382,6 +398,7 @@ impl AudioEngine {
     }
 
     pub fn disconnect(&mut self) {
+        self.stop_recording();
         if let Some(ref client) = self.client {
             if let Some(node_id) = self.meter_node_id.take() {
                 let _ = client.free_node(node_id);
@@ -421,6 +438,7 @@ impl AudioEngine {
         client.create_group(GROUP_SOURCES, 1, 0).map_err(|e| e.to_string())?;
         client.create_group(GROUP_PROCESSING, 1, 0).map_err(|e| e.to_string())?;
         client.create_group(GROUP_OUTPUT, 1, 0).map_err(|e| e.to_string())?;
+        client.create_group(GROUP_RECORD, 1, 0).map_err(|e| e.to_string())?;
         self.groups_created = true;
         Ok(())
     }
@@ -511,6 +529,12 @@ impl AudioEngine {
                         crate::state::param::ParamValue::Float(v) => *v,
                         crate::state::param::ParamValue::Int(v) => *v as f32,
                         crate::state::param::ParamValue::Bool(v) => if *v { 1.0 } else { 0.0 },
+                    };
+                    // Gate gain to 0 when instrument is inactive
+                    let val = if p.name == "gain" && !instrument.active {
+                        0.0
+                    } else {
+                        val
                     };
                     params.push((p.name.clone(), val));
                 }
@@ -1460,6 +1484,93 @@ impl AudioEngine {
         }
 
         Ok(())
+    }
+
+    // =========================================================================
+    // Recording (DiskOut)
+    // =========================================================================
+
+    /// Buffer number reserved for disk recording (well above sampler range)
+    const RECORD_BUFNUM: i32 = 900;
+
+    /// Start recording audio from the given bus to a WAV file.
+    pub fn start_recording(&mut self, bus: i32, path: &Path) -> Result<(), String> {
+        if self.recording.is_some() {
+            return Err("Already recording".to_string());
+        }
+        let client = self.client.as_ref().ok_or("Not connected")?;
+
+        // Allocate a ring buffer for DiskOut: 131072 frames, 2 channels
+        client.alloc_buffer(Self::RECORD_BUFNUM, 131072, 2)
+            .map_err(|e| e.to_string())?;
+
+        // Open the buffer for disk writing
+        let path_str = path.to_string_lossy().to_string();
+        client.open_buffer_for_write(Self::RECORD_BUFNUM, &path_str)
+            .map_err(|e| e.to_string())?;
+
+        // Create DiskOut synth in the record group
+        let node_id = self.next_node_id;
+        self.next_node_id += 1;
+        client.create_synth_in_group(
+            "ilex_disk_record",
+            node_id,
+            GROUP_RECORD,
+            &[
+                ("bufnum".to_string(), Self::RECORD_BUFNUM as f32),
+                ("in".to_string(), bus as f32),
+            ],
+        ).map_err(|e| e.to_string())?;
+
+        self.recording = Some(RecordingState {
+            bufnum: Self::RECORD_BUFNUM,
+            node_id,
+            path: path.to_path_buf(),
+            started_at: Instant::now(),
+        });
+
+        Ok(())
+    }
+
+    /// Stop the active recording and return the path of the recorded file.
+    /// The buffer is not freed immediately — call `poll_pending_buffer_free()` in the
+    /// main loop to free it after SuperCollider has flushed the file to disk.
+    pub fn stop_recording(&mut self) -> Option<PathBuf> {
+        let rec = self.recording.take()?;
+        if let Some(ref client) = self.client {
+            let _ = client.free_node(rec.node_id);
+            let _ = client.close_buffer(rec.bufnum);
+            // Defer buffer free to give scsynth time to flush the file
+            self.pending_buffer_free = Some((rec.bufnum, Instant::now()));
+        }
+        Some(rec.path)
+    }
+
+    /// Free any pending recording buffer after a delay.
+    /// Returns true if a buffer was freed this call.
+    pub fn poll_pending_buffer_free(&mut self) -> bool {
+        if let Some((bufnum, when)) = self.pending_buffer_free {
+            if when.elapsed() >= Duration::from_millis(500) {
+                if let Some(ref client) = self.client {
+                    let _ = client.free_buffer(bufnum);
+                }
+                self.pending_buffer_free = None;
+                return true;
+            }
+        }
+        false
+    }
+
+    pub fn is_recording(&self) -> bool {
+        self.recording.is_some()
+    }
+
+    pub fn recording_elapsed(&self) -> Option<Duration> {
+        self.recording.as_ref().map(|r| r.started_at.elapsed())
+    }
+
+    pub fn recording_path(&self) -> Option<&Path> {
+        self.recording.as_ref().map(|r| r.path.as_path())
     }
 
 }

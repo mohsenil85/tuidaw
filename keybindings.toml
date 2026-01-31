@@ -30,6 +30,7 @@ bindings = [
   { key = "0", action = "select:10", description = "Select instrument 10" },
   { key = "_", action = "select_two_digit", description = "Two-digit instrument select" },
   { key = "/", action = "toggle_piano_mode", description = "Toggle piano keyboard" },
+  { key = "Ctrl+r", action = "record_master", description = "Toggle master recording" },
   { key = "Escape", action = "escape", description = "Escape" },
 ]
 
@@ -140,6 +141,8 @@ bindings = [
   { key = "s", action = "cycle_lfo_shape", description = "Cycle LFO shape" },
   { key = "m", action = "cycle_lfo_target", description = "Cycle LFO target" },
   { key = "Shift+Tab", action = "prev_section", description = "Previous section" },
+  { key = "x", action = "toggle_active", description = "Toggle active (AudioIn)" },
+  { key = "o", action = "load_sample", description = "Load sample" },
 ]
 
 [layers.server]
@@ -151,6 +154,7 @@ bindings = [
   { key = "b", action = "compile", description = "Build synthdefs" },
   { key = "l", action = "load_synthdefs", description = "Load synthdefs" },
   { key = "r", action = "refresh_devices", description = "Refresh audio devices" },
+  { key = "R", action = "record_master", description = "Toggle master recording" },
   { key = "Tab", action = "next_section", description = "Next section" },
 ]
 
@@ -203,6 +207,7 @@ bindings = [
   { key = "Escape", action = "cancel", description = "Cancel and return" },
   { key = "Backspace", action = "parent", description = "Go to parent directory" },
   { key = "h", action = "parent", description = "Go to parent directory" },
+  { key = "^", action = "parent", description = "Go to parent directory" },
   { key = "Down", action = "next", description = "Next entry" },
   { key = "j", action = "next", description = "Next entry" },
   { key = "Up", action = "prev", description = "Previous entry" },
@@ -210,6 +215,7 @@ bindings = [
   { key = "~", action = "home", description = "Go to home directory" },
   { key = "Home", action = "goto_top", description = "Go to top" },
   { key = "End", action = "goto_bottom", description = "Go to bottom" },
+  { key = "&", action = "toggle_hidden", description = "Toggle hidden files" },
 ]
 
 [layers.logo]

@@ -166,7 +166,7 @@ impl AddPane {
                     let color = match source {
                         SourceType::AudioIn => Color::AUDIO_IN_COLOR,
                         SourceType::BusIn => Color::BUS_IN_COLOR,
-                        SourceType::Sample => Color::SAMPLE_COLOR,
+                        SourceType::PitchedSampler => Color::SAMPLE_COLOR,
                         SourceType::Custom(_) => Color::CUSTOM_COLOR,
                         _ => Color::OSC_COLOR,
                     };

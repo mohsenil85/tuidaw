@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::audio::{self, AudioEngine};
 use crate::panes::{FileBrowserPane, InstrumentEditPane, PianoRollPane, ServerPane};
@@ -18,6 +19,16 @@ pub fn default_rack_path() -> PathBuf {
     } else {
         PathBuf::from("default.sqlite")
     }
+}
+
+/// Generate a timestamped path for a recording file in the current directory
+fn recording_path(prefix: &str) -> PathBuf {
+    let dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let secs = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    dir.join(format!("{}_{}.wav", prefix, secs))
 }
 
 /// Dispatch an action. Returns true if the app should quit.
@@ -94,6 +105,7 @@ fn dispatch_instrument(
                     instrument.effects = edited.effects;
                     instrument.amp_envelope = edited.amp_envelope;
                     instrument.polyphonic = edited.polyphonic;
+                    instrument.active = edited.active;
                 }
             }
             if audio_engine.is_running() {
@@ -178,6 +190,25 @@ fn dispatch_instrument(
                     }
                 }
             }
+        }
+        InstrumentAction::LoadSampleResult(instrument_id, ref path) => {
+            let instrument_id = *instrument_id;
+            let path_str = path.to_string_lossy().to_string();
+
+            let buffer_id = state.instruments.next_sampler_buffer_id;
+            state.instruments.next_sampler_buffer_id += 1;
+
+            if audio_engine.is_running() {
+                let _ = audio_engine.load_sample(buffer_id, &path_str);
+            }
+
+            if let Some(instrument) = state.instruments.instrument_mut(instrument_id) {
+                if let Some(ref mut config) = instrument.sampler_config {
+                    config.buffer_id = Some(buffer_id);
+                }
+            }
+
+            panes.pop(&*state);
         }
         InstrumentAction::AddEffect(_, _)
         | InstrumentAction::RemoveEffect(_, _)
@@ -645,6 +676,102 @@ fn dispatch_server(
                     }
                     (_, Err(e)) => {
                         server.set_status(audio_engine.status(), &format!("Error loading custom: {}", e));
+                    }
+                }
+            }
+        }
+        ServerAction::RecordMaster => {
+            if audio_engine.is_recording() {
+                if let Some(path) = audio_engine.stop_recording() {
+                    // Auto-deactivate AudioIn instrument on stop
+                    if let Some(inst) = state.instruments.selected_instrument_mut() {
+                        if inst.source.is_audio_input() && inst.active {
+                            inst.active = false;
+                            let _ = audio_engine.rebuild_instrument_routing(&state.instruments, &state.session);
+                        }
+                    }
+                    // Defer waveform load — scsynth needs time to flush the WAV
+                    state.pending_recording_path = Some(path.clone());
+                    if let Some(server) = panes.get_pane_mut::<ServerPane>("server") {
+                        server.set_status(
+                            audio_engine.status(),
+                            &format!("Recording saved: {}", path.display()),
+                        );
+                    }
+                }
+            } else if audio_engine.is_running() {
+                // Auto-activate AudioIn instrument on start
+                if let Some(inst) = state.instruments.selected_instrument_mut() {
+                    if inst.source.is_audio_input() && !inst.active {
+                        inst.active = true;
+                        let _ = audio_engine.rebuild_instrument_routing(&state.instruments, &state.session);
+                    }
+                }
+                let path = recording_path("master");
+                match audio_engine.start_recording(0, &path) {
+                    Ok(()) => {
+                        if let Some(server) = panes.get_pane_mut::<ServerPane>("server") {
+                            server.set_status(
+                                audio_engine.status(),
+                                &format!("Recording to {}", path.display()),
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        if let Some(server) = panes.get_pane_mut::<ServerPane>("server") {
+                            server.set_status(audio_engine.status(), &format!("Record error: {}", e));
+                        }
+                    }
+                }
+            }
+        }
+        ServerAction::RecordInput => {
+            if audio_engine.is_recording() {
+                if let Some(path) = audio_engine.stop_recording() {
+                    // Auto-deactivate AudioIn instrument on stop
+                    if let Some(inst) = state.instruments.selected_instrument_mut() {
+                        if inst.source.is_audio_input() && inst.active {
+                            inst.active = false;
+                            let _ = audio_engine.rebuild_instrument_routing(&state.instruments, &state.session);
+                        }
+                    }
+                    // Defer waveform load — scsynth needs time to flush the WAV
+                    state.pending_recording_path = Some(path.clone());
+                    if let Some(server) = panes.get_pane_mut::<ServerPane>("server") {
+                        server.set_status(
+                            audio_engine.status(),
+                            &format!("Recording saved: {}", path.display()),
+                        );
+                    }
+                }
+            } else if audio_engine.is_running() {
+                // Record from the selected instrument's source_out bus
+                if let Some(inst) = state.instruments.selected_instrument() {
+                    let inst_id = inst.id;
+                    // Auto-activate AudioIn instrument on start
+                    if inst.source.is_audio_input() && !inst.active {
+                        if let Some(inst_mut) = state.instruments.instrument_mut(inst_id) {
+                            inst_mut.active = true;
+                        }
+                        let _ = audio_engine.rebuild_instrument_routing(&state.instruments, &state.session);
+                    }
+                    let path = recording_path(&format!("input_{}", inst_id));
+                    // Bus 0 is hardware out; for instrument recording we use bus 0
+                    // since instruments route through output to bus 0
+                    match audio_engine.start_recording(0, &path) {
+                        Ok(()) => {
+                            if let Some(server) = panes.get_pane_mut::<ServerPane>("server") {
+                                server.set_status(
+                                    audio_engine.status(),
+                                    &format!("Recording to {}", path.display()),
+                                );
+                            }
+                        }
+                        Err(e) => {
+                            if let Some(server) = panes.get_pane_mut::<ServerPane>("server") {
+                                server.set_status(audio_engine.status(), &format!("Record error: {}", e));
+                            }
+                        }
                     }
                 }
             }
@@ -1205,7 +1332,7 @@ fn dispatch_chopper(
 }
 
 /// Compute waveform peaks from a WAV file for display
-fn compute_waveform_peaks(path: &str) -> (Vec<f32>, f32) {
+pub fn compute_waveform_peaks(path: &str) -> (Vec<f32>, f32) {
     let reader = match hound::WavReader::open(path) {
         Ok(r) => r,
         Err(_) => return (Vec::new(), 0.0),

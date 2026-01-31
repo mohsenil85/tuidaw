@@ -51,7 +51,10 @@ impl Pane for WaveformPane {
     }
 
     fn render(&self, area: RatatuiRect, buf: &mut Buffer, state: &AppState) {
-        let waveform = state.audio_in_waveform.as_deref().unwrap_or(&[]);
+        let is_recorded = state.recorded_waveform.is_some();
+        let waveform = state.recorded_waveform.as_deref()
+            .or(state.audio_in_waveform.as_deref())
+            .unwrap_or(&[]);
 
         let rect = center_rect(area, 97, 29);
 
@@ -63,7 +66,9 @@ impl Pane for WaveformPane {
         let grid_height = rect.height.saturating_sub(header_height + footer_height + 1);
 
         // Border with instrument label
-        let title = if let Some(inst) = state.instruments.selected_instrument() {
+        let title = if is_recorded {
+            " Recorded Waveform ".to_string()
+        } else if let Some(inst) = state.instruments.selected_instrument() {
             format!(" Audio Input: {} ", inst.name)
         } else {
             " Audio Input ".to_string()

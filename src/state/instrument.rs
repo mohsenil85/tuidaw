@@ -13,7 +13,7 @@ pub enum SourceType {
     Tri,
     AudioIn,
     BusIn,
-    Sample,
+    PitchedSampler,
     Kit,
     Custom(CustomSynthDefId),
 }
@@ -27,7 +27,7 @@ impl SourceType {
             SourceType::Tri => "Triangle",
             SourceType::AudioIn => "Audio In",
             SourceType::BusIn => "Bus In",
-            SourceType::Sample => "Sample",
+            SourceType::PitchedSampler => "Pitched Sampler",
             SourceType::Kit => "Kit",
             SourceType::Custom(_) => "Custom",
         }
@@ -52,7 +52,7 @@ impl SourceType {
             SourceType::Tri => "tri",
             SourceType::AudioIn => "audio_in",
             SourceType::BusIn => "bus_in",
-            SourceType::Sample => "sample",
+            SourceType::PitchedSampler => "sample",
             SourceType::Kit => "kit",
             SourceType::Custom(_) => "custom",
         }
@@ -78,7 +78,7 @@ impl SourceType {
             SourceType::Tri => "ilex_tri",
             SourceType::AudioIn => "ilex_audio_in",
             SourceType::BusIn => "ilex_bus_in",
-            SourceType::Sample => "ilex_sampler",
+            SourceType::PitchedSampler => "ilex_sampler",
             SourceType::Kit => "ilex_sampler_oneshot",
             SourceType::Custom(_) => "ilex_saw", // Fallback, use synth_def_name_with_registry instead
         }
@@ -137,7 +137,7 @@ impl SourceType {
                     max: 4.0,
                 },
             ],
-            SourceType::Sample => vec![
+            SourceType::PitchedSampler => vec![
                 Param {
                     name: "rate".to_string(),
                     value: ParamValue::Float(1.0),
@@ -203,7 +203,7 @@ impl SourceType {
     }
 
     pub fn is_sample(&self) -> bool {
-        matches!(self, SourceType::Sample)
+        matches!(self, SourceType::PitchedSampler)
     }
 
     pub fn is_kit(&self) -> bool {
@@ -229,7 +229,7 @@ impl SourceType {
 
     /// Built-in oscillator types (excluding custom)
     pub fn all() -> Vec<SourceType> {
-        vec![SourceType::Saw, SourceType::Sin, SourceType::Sqr, SourceType::Tri, SourceType::AudioIn, SourceType::BusIn, SourceType::Sample, SourceType::Kit]
+        vec![SourceType::Saw, SourceType::Sin, SourceType::Sqr, SourceType::Tri, SourceType::AudioIn, SourceType::BusIn, SourceType::PitchedSampler, SourceType::Kit]
     }
 
     /// All oscillator types including custom ones from registry
@@ -638,9 +638,10 @@ pub struct Instrument {
     pub pan: f32,
     pub mute: bool,
     pub solo: bool,
+    pub active: bool,
     pub output_target: OutputTarget,
     pub sends: Vec<MixerSend>,
-    // Sample configuration (only used when source is SourceType::Sample)
+    // Sample configuration (only used when source is SourceType::PitchedSampler)
     pub sampler_config: Option<SamplerConfig>,
     // Kit sequencer (only used when source is SourceType::Kit)
     pub drum_sequencer: Option<DrumSequencerState>,
@@ -675,6 +676,7 @@ impl Instrument {
             pan: 0.0,
             mute: false,
             solo: false,
+            active: !source.is_audio_input(),
             output_target: OutputTarget::Master,
             sends,
             sampler_config,

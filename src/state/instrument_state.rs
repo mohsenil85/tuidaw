@@ -6,6 +6,7 @@ pub struct InstrumentState {
     pub instruments: Vec<Instrument>,
     pub selected: Option<usize>,
     pub next_id: InstrumentId,
+    pub next_sampler_buffer_id: u32,
 }
 
 impl InstrumentState {
@@ -14,6 +15,7 @@ impl InstrumentState {
             instruments: Vec::new(),
             selected: None,
             next_id: 0,
+            next_sampler_buffer_id: 20000,
         }
     }
 

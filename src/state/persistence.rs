@@ -102,6 +102,7 @@ pub fn save_project(path: &Path, session: &SessionState, instruments: &Instrumen
                 pan REAL NOT NULL,
                 mute INTEGER NOT NULL,
                 solo INTEGER NOT NULL,
+                active INTEGER NOT NULL DEFAULT 1,
                 output_target TEXT NOT NULL
             );
 
@@ -364,7 +365,7 @@ pub fn save_project(path: &Path, session: &SessionState, instruments: &Instrumen
     )?;
 
     conn.execute(
-        "INSERT OR REPLACE INTO schema_version (version, applied_at) VALUES (4, datetime('now'))",
+        "INSERT OR REPLACE INTO schema_version (version, applied_at) VALUES (5, datetime('now'))",
         [],
     )?;
 
@@ -447,6 +448,7 @@ pub fn load_project(path: &Path) -> SqlResult<(SessionState, InstrumentState)> {
         instruments,
         selected: selected_instrument.map(|s| s as usize),
         next_id,
+        next_sampler_buffer_id: 20000,
     };
 
     Ok((session, instrument_state))
@@ -583,8 +585,8 @@ fn save_instruments(conn: &SqlConnection, instruments: &InstrumentState) -> SqlR
         "INSERT INTO instruments (id, name, position, source_type, filter_type, filter_cutoff, filter_resonance,
              lfo_enabled, lfo_rate, lfo_depth, lfo_shape, lfo_target,
              amp_attack, amp_decay, amp_sustain, amp_release, polyphonic,
-             level, pan, mute, solo, output_target)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22)",
+             level, pan, mute, solo, active, output_target)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23)",
     )?;
     for (pos, inst) in instruments.instruments.iter().enumerate() {
         let source_str = match inst.source {
@@ -650,6 +652,7 @@ fn save_instruments(conn: &SqlConnection, instruments: &InstrumentState) -> SqlR
             inst.pan as f64,
             inst.mute,
             inst.solo,
+            inst.active,
             output_str,
         ])?;
     }
@@ -1010,7 +1013,7 @@ fn load_instruments(conn: &SqlConnection) -> SqlResult<Vec<Instrument>> {
          COALESCE(lfo_shape, 'sine') as lfo_shape,
          COALESCE(lfo_target, 'filter') as lfo_target,
          amp_attack, amp_decay, amp_sustain, amp_release, polyphonic,
-         level, pan, mute, solo, output_target
+         level, pan, mute, solo, COALESCE(active, 1) as active, output_target
          FROM instruments ORDER BY position",
     )?;
     let rows = stmt.query_map([], |row| {
@@ -1034,7 +1037,8 @@ fn load_instruments(conn: &SqlConnection) -> SqlResult<Vec<Instrument>> {
         let pan: f64 = row.get(17)?;
         let mute: bool = row.get(18)?;
         let solo: bool = row.get(19)?;
-        let output_str: String = row.get(20)?;
+        let active: bool = row.get(20)?;
+        let output_str: String = row.get(21)?;
         Ok((
             id,
             name,
@@ -1056,6 +1060,7 @@ fn load_instruments(conn: &SqlConnection) -> SqlResult<Vec<Instrument>> {
             pan,
             mute,
             solo,
+            active,
             output_str,
         ))
     })?;
@@ -1082,6 +1087,7 @@ fn load_instruments(conn: &SqlConnection) -> SqlResult<Vec<Instrument>> {
             pan,
             mute,
             solo,
+            active,
             output_str,
         ) = result?;
 
@@ -1169,6 +1175,7 @@ fn load_instruments(conn: &SqlConnection) -> SqlResult<Vec<Instrument>> {
             pan: pan as f32,
             mute,
             solo,
+            active,
             output_target,
             sends,
             sampler_config,
@@ -2048,7 +2055,7 @@ fn parse_source_type(s: &str) -> SourceType {
         "sqr" => SourceType::Sqr,
         "tri" => SourceType::Tri,
         "audio_in" => SourceType::AudioIn,
-        "sample" | "sampler" => SourceType::Sample,
+        "sample" | "sampler" | "pitched_sampler" => SourceType::PitchedSampler,
         "kit" | "drum" => SourceType::Kit,
         "bus_in" => SourceType::BusIn,
         other if other.starts_with("custom:") => {

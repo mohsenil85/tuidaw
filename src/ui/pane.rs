@@ -57,6 +57,7 @@ pub enum InstrumentAction {
     SelectFirst,
     SelectLast,
     PlayDrumPad(usize),
+    LoadSampleResult(InstrumentId, PathBuf),
 }
 
 /// Mixer actions
@@ -130,6 +131,8 @@ pub enum ServerAction {
     CompileSynthDefs,
     LoadSynthDefs,
     Restart,
+    RecordMaster,
+    RecordInput,
 }
 
 /// Session/file actions
@@ -185,6 +188,7 @@ pub enum FileSelectAction {
     ImportCustomSynthDef,
     LoadDrumSample(usize), // pad index
     LoadChopperSample,
+    LoadPitchedSample(InstrumentId),
 }
 
 /// Trait for UI panes (screens/views).

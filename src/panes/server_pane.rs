@@ -173,6 +173,7 @@ impl Pane for ServerPane {
             "disconnect" => Action::Server(ServerAction::Disconnect),
             "compile" => Action::Server(ServerAction::CompileSynthDefs),
             "load_synthdefs" => Action::Server(ServerAction::LoadSynthDefs),
+            "record_master" => Action::Server(ServerAction::RecordMaster),
             "refresh_devices" => {
                 self.refresh_devices();
                 if self.server_running {
@@ -254,7 +255,7 @@ impl Pane for ServerPane {
         Action::None
     }
 
-    fn render(&self, area: RatatuiRect, buf: &mut Buffer, _state: &AppState) {
+    fn render(&self, area: RatatuiRect, buf: &mut Buffer, state: &AppState) {
         let output_devs = self.output_devices();
         let input_devs = self.input_devices();
 
@@ -317,7 +318,22 @@ impl Pane for ServerPane {
             ));
             Paragraph::new(msg_line).render(RatatuiRect::new(x, y, w, 1), buf);
         }
-        y += 2;
+        y += 1;
+
+        // Recording status
+        if state.recording {
+            let mins = state.recording_secs / 60;
+            let secs = state.recording_secs % 60;
+            let rec_line = Line::from(vec![
+                Span::styled("Recording:  ", label_style),
+                Span::styled(
+                    format!("REC {:02}:{:02}", mins, secs),
+                    ratatui::style::Style::from(Style::new().fg(Color::MUTE_COLOR).bold()),
+                ),
+            ]);
+            Paragraph::new(rec_line).render(RatatuiRect::new(x, y, w, 1), buf);
+        }
+        y += 1;
 
         // Output Device section
         let output_focused = self.focus == ServerPaneFocus::OutputDevice;

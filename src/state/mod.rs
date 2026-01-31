@@ -26,7 +26,12 @@ pub struct AppState {
     pub session: SessionState,
     pub instruments: InstrumentState,
     pub audio_in_waveform: Option<Vec<f32>>,
+    pub recorded_waveform: Option<Vec<f32>>,
+    /// Path to a recently stopped recording, pending waveform load
+    pub pending_recording_path: Option<std::path::PathBuf>,
     pub keyboard_layout: KeyboardLayout,
+    pub recording: bool,
+    pub recording_secs: u64,
 }
 
 impl AppState {
@@ -36,7 +41,11 @@ impl AppState {
             session: SessionState::new(),
             instruments: InstrumentState::new(),
             audio_in_waveform: None,
+            recorded_waveform: None,
+            pending_recording_path: None,
             keyboard_layout: KeyboardLayout::default(),
+            recording: false,
+            recording_secs: 0,
         }
     }
 
@@ -45,7 +54,11 @@ impl AppState {
             session: SessionState::new_with_defaults(defaults),
             instruments: InstrumentState::new(),
             audio_in_waveform: None,
+            recorded_waveform: None,
+            pending_recording_path: None,
             keyboard_layout: KeyboardLayout::default(),
+            recording: false,
+            recording_secs: 0,
         }
     }
 

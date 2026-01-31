@@ -267,6 +267,13 @@ SynthDef(\ilex_meter, {
     SendPeakRMS.kr(In.ar(0, 2), 10, 3, "/meter");
 }).writeDefFile(dir);
 
+// ============================================================================
+// Disk Recorder - Writes stereo audio from a bus to a disk-backed buffer
+// ============================================================================
+SynthDef(\ilex_disk_record, { |bufnum=0, in=0|
+    DiskOut.ar(bufnum, In.ar(in, 2));
+}).writeDefFile(dir);
+
 "Done! All SynthDefs written to: ".post;
 dir.postln;
 0.exit;
