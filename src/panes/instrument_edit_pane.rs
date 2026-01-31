@@ -423,9 +423,12 @@ impl Pane for InstrumentEditPane {
                     return self.emit_update();
                 }
                 KeyCode::Char(c) => {
-                    if let Some(pitch) = self.piano.key_to_pitch(c) {
-                        let velocity = if event.modifiers.shift { 127 } else { 100 };
-                        return Action::Instrument(InstrumentAction::PlayNote(pitch, velocity));
+                    if let Some(pitches) = self.piano.key_to_pitches(c) {
+                        if pitches.len() == 1 {
+                            return Action::Instrument(InstrumentAction::PlayNote(pitches[0], 100));
+                        } else {
+                            return Action::Instrument(InstrumentAction::PlayNotes(pitches, 100));
+                        }
                     }
                     return Action::None;
                 }

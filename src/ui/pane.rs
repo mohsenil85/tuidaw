@@ -50,6 +50,7 @@ pub enum InstrumentAction {
     #[allow(dead_code)]
     SetFilter(InstrumentId, Option<FilterType>),
     PlayNote(u8, u8),
+    PlayNotes(Vec<u8>, u8),
     SelectNext,
     SelectPrev,
     SelectFirst,
@@ -96,6 +97,7 @@ pub enum PianoRollAction {
     CycleTimeSig,
     TogglePolyMode,
     PlayNote(u8, u8),
+    PlayNotes(Vec<u8>, u8),
     PlayStopRecord,
 }
 
@@ -125,6 +127,7 @@ pub enum ServerAction {
     Stop,
     CompileSynthDefs,
     LoadSynthDefs,
+    Restart,
 }
 
 /// Session/file actions

@@ -114,7 +114,6 @@ fn dispatch_instrument(
         InstrumentAction::PlayNote(pitch, velocity) => {
             let pitch = *pitch;
             let velocity = *velocity;
-            // Get the selected instrument's id
             let instrument_info: Option<u32> = state.instruments.selected_instrument().map(|s| s.id);
 
             if let Some(instrument_id) = instrument_info {
@@ -123,6 +122,20 @@ fn dispatch_instrument(
                     let _ = audio_engine.spawn_voice(instrument_id, pitch, vel_f, 0.0, &state.instruments, &state.session);
                     let duration_ticks = 240;
                     active_notes.push((instrument_id, pitch, duration_ticks));
+                }
+            }
+        }
+        InstrumentAction::PlayNotes(ref pitches, velocity) => {
+            let velocity = *velocity;
+            let instrument_info: Option<u32> = state.instruments.selected_instrument().map(|s| s.id);
+
+            if let Some(instrument_id) = instrument_info {
+                if audio_engine.is_running() {
+                    let vel_f = velocity as f32 / 127.0;
+                    for &pitch in pitches {
+                        let _ = audio_engine.spawn_voice(instrument_id, pitch, vel_f, 0.0, &state.instruments, &state.session);
+                        active_notes.push((instrument_id, pitch, 240));
+                    }
                 }
             }
         }
@@ -450,6 +463,41 @@ fn dispatch_piano_roll(
                 }
             }
         }
+        PianoRollAction::PlayNotes(ref pitches, velocity) => {
+            let velocity = *velocity;
+            let track_instrument_id: Option<u32> = {
+                let track_idx = panes
+                    .get_pane_mut::<PianoRollPane>("piano_roll")
+                    .map(|pr| pr.current_track());
+                if let Some(idx) = track_idx {
+                    state.session.piano_roll.track_at(idx).map(|t| t.module_id)
+                } else {
+                    None
+                }
+            };
+
+            if let Some(instrument_id) = track_instrument_id {
+                if audio_engine.is_running() {
+                    let vel_f = velocity as f32 / 127.0;
+                    for &pitch in pitches {
+                        let _ = audio_engine.spawn_voice(instrument_id, pitch, vel_f, 0.0, &state.instruments, &state.session);
+                        active_notes.push((instrument_id, pitch, 240));
+                    }
+                }
+
+                // Record chord notes if recording
+                let recording_info = panes
+                    .get_pane_mut::<PianoRollPane>("piano_roll")
+                    .filter(|pr| pr.is_recording())
+                    .map(|pr| (pr.current_track(), pr.default_duration(), pr.default_velocity()));
+                if let Some((track_idx, duration, vel)) = recording_info {
+                    let playhead = state.session.piano_roll.playhead;
+                    for &pitch in pitches {
+                        state.session.piano_roll.toggle_note(track_idx, pitch, playhead, duration, vel);
+                    }
+                }
+            }
+        }
         PianoRollAction::MoveCursor(_, _)
         | PianoRollAction::SetBpm(_)
         | PianoRollAction::Zoom(_)
@@ -587,6 +635,91 @@ fn dispatch_server(
                     }
                     (_, Err(e)) => {
                         server.set_status(audio_engine.status(), &format!("Error loading custom: {}", e));
+                    }
+                }
+            }
+        }
+        ServerAction::Restart => {
+            // Get selected devices before stopping
+            let (input_dev, output_dev) = panes.get_pane_mut::<ServerPane>("server")
+                .map(|s| (s.selected_input_device(), s.selected_output_device()))
+                .unwrap_or((None, None));
+
+            // Stop
+            audio_engine.stop_server();
+            if let Some(server) = panes.get_pane_mut::<ServerPane>("server") {
+                server.set_status(audio::ServerStatus::Stopped, "Restarting server...");
+                server.set_server_running(false);
+            }
+
+            // Start with selected devices
+            let start_result = audio_engine.start_server_with_devices(
+                input_dev.as_deref(),
+                output_dev.as_deref(),
+            );
+            match start_result {
+                Ok(()) => {
+                    if let Some(server) = panes.get_pane_mut::<ServerPane>("server") {
+                        server.set_status(audio::ServerStatus::Running, "Server restarted, connecting...");
+                        server.set_server_running(true);
+                    }
+
+                    // Connect
+                    let connect_result = audio_engine.connect("127.0.0.1:57110");
+                    if let Some(server) = panes.get_pane_mut::<ServerPane>("server") {
+                        match connect_result {
+                            Ok(()) => {
+                                // Load built-in synthdefs
+                                let synthdef_dir = std::path::Path::new("synthdefs");
+                                let builtin_result = audio_engine.load_synthdefs(synthdef_dir);
+
+                                // Load custom synthdefs
+                                let config_dir = config_synthdefs_dir();
+                                let custom_result = if config_dir.exists() {
+                                    audio_engine.load_synthdefs(&config_dir)
+                                } else {
+                                    Ok(())
+                                };
+
+                                // Load drum samples
+                                for instrument in &state.instruments.instruments {
+                                    if let Some(seq) = &instrument.drum_sequencer {
+                                        for pad in &seq.pads {
+                                            if let Some(buffer_id) = pad.buffer_id {
+                                                if let Some(ref path) = pad.path {
+                                                    let _ = audio_engine.load_sample(buffer_id, path);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // Rebuild instrument routing
+                                let _ = audio_engine.rebuild_instrument_routing(&state.instruments, &state.session);
+
+                                match (builtin_result, custom_result) {
+                                    (Ok(()), Ok(())) => {
+                                        server.set_status(audio::ServerStatus::Connected, "Server restarted");
+                                    }
+                                    (Err(e), _) | (_, Err(e)) => {
+                                        server.set_status(
+                                            audio::ServerStatus::Connected,
+                                            &format!("Restarted (synthdef warning: {})", e),
+                                        );
+                                    }
+                                }
+                                server.clear_device_config_dirty();
+                            }
+                            Err(e) => {
+                                server.set_status(audio::ServerStatus::Error, &e.to_string());
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    if let Some(server) = panes.get_pane_mut::<ServerPane>("server") {
+                        server.set_status(audio::ServerStatus::Error, &e);
+                        server.set_server_running(false);
                     }
                 }
             }

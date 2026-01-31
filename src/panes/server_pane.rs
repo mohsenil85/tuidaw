@@ -82,6 +82,10 @@ impl ServerPane {
         self.server_running = running;
     }
 
+    pub fn clear_device_config_dirty(&mut self) {
+        self.device_config_dirty = false;
+    }
+
     /// Get the selected output device name (None = system default)
     pub fn selected_output_device(&self) -> Option<String> {
         if self.selected_output == 0 {
@@ -199,9 +203,14 @@ impl Pane for ServerPane {
                         return Action::None;
                     }
                     KeyCode::Enter => {
-                        self.device_config_dirty = true;
                         self.save_config();
-                        return Action::None;
+                        if self.server_running {
+                            self.device_config_dirty = false;
+                            return Action::Server(ServerAction::Restart);
+                        } else {
+                            self.device_config_dirty = true;
+                            return Action::None;
+                        }
                     }
                     _ => {}
                 }
@@ -222,9 +231,14 @@ impl Pane for ServerPane {
                         return Action::None;
                     }
                     KeyCode::Enter => {
-                        self.device_config_dirty = true;
                         self.save_config();
-                        return Action::None;
+                        if self.server_running {
+                            self.device_config_dirty = false;
+                            return Action::Server(ServerAction::Restart);
+                        } else {
+                            self.device_config_dirty = true;
+                            return Action::None;
+                        }
                     }
                     _ => {}
                 }

@@ -3,6 +3,17 @@
 pub enum PianoLayout {
     C,
     A,
+    Stradella,
+}
+
+/// Stradella bass row types.
+enum StradellaRow {
+    CounterBass,
+    Bass,
+    Major,
+    Minor,
+    Dom7,
+    Dim7,
 }
 
 /// Shared piano keyboard state and key-to-pitch mapping.
@@ -50,7 +61,7 @@ impl PianoKeyboard {
         self.octave
     }
 
-    /// Cycle layout C→A→off. Returns true if piano mode was deactivated.
+    /// Cycle layout C→A→Stradella→off. Returns true if piano mode was deactivated.
     pub fn handle_escape(&mut self) -> bool {
         match self.layout {
             PianoLayout::C => {
@@ -58,6 +69,10 @@ impl PianoKeyboard {
                 false
             }
             PianoLayout::A => {
+                self.layout = PianoLayout::Stradella;
+                false
+            }
+            PianoLayout::Stradella => {
                 self.active = false;
                 true
             }
@@ -84,28 +99,50 @@ impl PianoKeyboard {
         }
     }
 
-    /// Status label for rendering, e.g. "PIANO C4".
+    /// Status label for rendering, e.g. "PIANO C4" or "BASS 4".
     pub fn status_label(&self) -> String {
-        let layout_char = match self.layout {
-            PianoLayout::C => 'C',
-            PianoLayout::A => 'A',
-        };
-        format!(" PIANO {}{} ", layout_char, self.octave)
+        match self.layout {
+            PianoLayout::C => format!(" PIANO C{} ", self.octave),
+            PianoLayout::A => format!(" PIANO A{} ", self.octave),
+            PianoLayout::Stradella => format!(" BASS {} ", self.octave),
+        }
     }
 
     /// Convert a keyboard character to a MIDI pitch using current octave and layout.
+    /// Returns None for Stradella layout (use key_to_pitches instead).
     pub fn key_to_pitch(&self, key: char) -> Option<u8> {
         let offset = match self.layout {
             PianoLayout::C => Self::key_to_offset_c(key),
             PianoLayout::A => Self::key_to_offset_a(key),
+            PianoLayout::Stradella => return None,
         };
         offset.map(|off| {
             let base = match self.layout {
                 PianoLayout::C => (self.octave as i16 + 1) * 12,
                 PianoLayout::A => (self.octave as i16 + 1) * 12 - 3,
+                PianoLayout::Stradella => unreachable!(),
             };
             (base + off as i16).clamp(0, 127) as u8
         })
+    }
+
+    /// Convert a keyboard character to MIDI pitches using current layout.
+    /// For C/A layouts, returns a single pitch. For Stradella, returns chord pitches.
+    pub fn key_to_pitches(&self, key: char) -> Option<Vec<u8>> {
+        match self.layout {
+            PianoLayout::C | PianoLayout::A => {
+                self.key_to_pitch(key).map(|p| vec![p])
+            }
+            PianoLayout::Stradella => {
+                self.stradella_pitches(key)
+            }
+        }
+    }
+
+    /// Whether the current layout is Stradella (shift selects rows, not velocity).
+    #[allow(dead_code)]
+    pub fn is_stradella(&self) -> bool {
+        self.layout == PianoLayout::Stradella
     }
 
     /// Map a keyboard character to a MIDI note offset for C layout.
@@ -152,6 +189,142 @@ impl PianoKeyboard {
             ';' => Some(15),  // C
             'o' => Some(13),  // A#
             'p' => Some(16),  // C#
+            _ => None,
+        }
+    }
+
+    /// Build MIDI pitches for a Stradella bass key press.
+    fn stradella_pitches(&self, key: char) -> Option<Vec<u8>> {
+        let (col, row) = Self::stradella_key_info(key)?;
+
+        // Circle of fifths: Eb Bb F C G D A E B F#
+        const FIFTHS: [i16; 10] = [3, 10, 5, 0, 7, 2, 9, 4, 11, 6];
+        let root = FIFTHS[col];
+
+        let chord_base = (self.octave as i16 + 1) * 12;
+        let bass_base = chord_base - 12;
+
+        let pitches = match row {
+            StradellaRow::CounterBass => {
+                // Major 3rd above root, bass octave
+                vec![(bass_base + root + 4).clamp(0, 127) as u8]
+            }
+            StradellaRow::Bass => {
+                // Root, bass octave
+                vec![(bass_base + root).clamp(0, 127) as u8]
+            }
+            StradellaRow::Major => {
+                // Major triad
+                vec![
+                    (chord_base + root).clamp(0, 127) as u8,
+                    (chord_base + root + 4).clamp(0, 127) as u8,
+                    (chord_base + root + 7).clamp(0, 127) as u8,
+                ]
+            }
+            StradellaRow::Minor => {
+                // Minor triad
+                vec![
+                    (chord_base + root).clamp(0, 127) as u8,
+                    (chord_base + root + 3).clamp(0, 127) as u8,
+                    (chord_base + root + 7).clamp(0, 127) as u8,
+                ]
+            }
+            StradellaRow::Dom7 => {
+                // Dominant 7th (root, major 3rd, minor 7th)
+                vec![
+                    (chord_base + root).clamp(0, 127) as u8,
+                    (chord_base + root + 4).clamp(0, 127) as u8,
+                    (chord_base + root + 10).clamp(0, 127) as u8,
+                ]
+            }
+            StradellaRow::Dim7 => {
+                // Diminished 7th (root, minor 3rd, dim 7th dropped octave)
+                vec![
+                    (chord_base + root).clamp(0, 127) as u8,
+                    (chord_base + root + 3).clamp(0, 127) as u8,
+                    (chord_base + root - 3).clamp(0, 127) as u8,
+                ]
+            }
+        };
+
+        Some(pitches)
+    }
+
+    /// Map a keyboard character to Stradella column index and row type.
+    fn stradella_key_info(key: char) -> Option<(usize, StradellaRow)> {
+        match key {
+            // Bass (bottom row, unshifted)
+            'z' => Some((0, StradellaRow::Bass)),
+            'x' => Some((1, StradellaRow::Bass)),
+            'c' => Some((2, StradellaRow::Bass)),
+            'v' => Some((3, StradellaRow::Bass)),
+            'b' => Some((4, StradellaRow::Bass)),
+            'n' => Some((5, StradellaRow::Bass)),
+            'm' => Some((6, StradellaRow::Bass)),
+            ',' => Some((7, StradellaRow::Bass)),
+            '.' => Some((8, StradellaRow::Bass)),
+            '/' => Some((9, StradellaRow::Bass)),
+
+            // Counter-bass (bottom row, shifted)
+            'Z' => Some((0, StradellaRow::CounterBass)),
+            'X' => Some((1, StradellaRow::CounterBass)),
+            'C' => Some((2, StradellaRow::CounterBass)),
+            'V' => Some((3, StradellaRow::CounterBass)),
+            'B' => Some((4, StradellaRow::CounterBass)),
+            'N' => Some((5, StradellaRow::CounterBass)),
+            'M' => Some((6, StradellaRow::CounterBass)),
+            '<' => Some((7, StradellaRow::CounterBass)),
+            '>' => Some((8, StradellaRow::CounterBass)),
+            '?' => Some((9, StradellaRow::CounterBass)),
+
+            // Major (home row)
+            'a' => Some((0, StradellaRow::Major)),
+            's' => Some((1, StradellaRow::Major)),
+            'd' => Some((2, StradellaRow::Major)),
+            'f' => Some((3, StradellaRow::Major)),
+            'g' => Some((4, StradellaRow::Major)),
+            'h' => Some((5, StradellaRow::Major)),
+            'j' => Some((6, StradellaRow::Major)),
+            'k' => Some((7, StradellaRow::Major)),
+            'l' => Some((8, StradellaRow::Major)),
+            ';' => Some((9, StradellaRow::Major)),
+
+            // Minor (qwerty row)
+            'q' => Some((0, StradellaRow::Minor)),
+            'w' => Some((1, StradellaRow::Minor)),
+            'e' => Some((2, StradellaRow::Minor)),
+            'r' => Some((3, StradellaRow::Minor)),
+            't' => Some((4, StradellaRow::Minor)),
+            'y' => Some((5, StradellaRow::Minor)),
+            'u' => Some((6, StradellaRow::Minor)),
+            'i' => Some((7, StradellaRow::Minor)),
+            'o' => Some((8, StradellaRow::Minor)),
+            'p' => Some((9, StradellaRow::Minor)),
+
+            // Dom7 (number row)
+            '1' => Some((0, StradellaRow::Dom7)),
+            '2' => Some((1, StradellaRow::Dom7)),
+            '3' => Some((2, StradellaRow::Dom7)),
+            '4' => Some((3, StradellaRow::Dom7)),
+            '5' => Some((4, StradellaRow::Dom7)),
+            '6' => Some((5, StradellaRow::Dom7)),
+            '7' => Some((6, StradellaRow::Dom7)),
+            '8' => Some((7, StradellaRow::Dom7)),
+            '9' => Some((8, StradellaRow::Dom7)),
+            '0' => Some((9, StradellaRow::Dom7)),
+
+            // Dim7 (number row, shifted)
+            '!' => Some((0, StradellaRow::Dim7)),
+            '@' => Some((1, StradellaRow::Dim7)),
+            '#' => Some((2, StradellaRow::Dim7)),
+            '$' => Some((3, StradellaRow::Dim7)),
+            '%' => Some((4, StradellaRow::Dim7)),
+            '^' => Some((5, StradellaRow::Dim7)),
+            '&' => Some((6, StradellaRow::Dim7)),
+            '*' => Some((7, StradellaRow::Dim7)),
+            '(' => Some((8, StradellaRow::Dim7)),
+            ')' => Some((9, StradellaRow::Dim7)),
+
             _ => None,
         }
     }
