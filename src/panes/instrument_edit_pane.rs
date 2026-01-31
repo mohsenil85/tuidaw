@@ -11,7 +11,7 @@ use crate::state::{
 };
 use crate::ui::layout_helpers::center_rect;
 use crate::ui::widgets::TextInput;
-use crate::ui::{Action, Color, InputEvent, KeyCode, Keymap, MouseEvent, MouseEventKind, Pane, PianoKeyboard, InstrumentAction, Style, ToggleResult};
+use crate::ui::{Action, Color, InputEvent, KeyCode, Keymap, MouseEvent, MouseEventKind, Pane, PianoKeyboard, InstrumentAction, Style, ToggleResult, translate_key};
 
 /// Which section a row belongs to
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -429,7 +429,7 @@ impl Pane for InstrumentEditPane {
         "instrument_edit"
     }
 
-    fn handle_action(&mut self, action: &str, event: &InputEvent, _state: &AppState) -> Action {
+    fn handle_action(&mut self, action: &str, event: &InputEvent, state: &AppState) -> Action {
         match action {
             // Piano mode actions
             "piano:escape" => {
@@ -445,6 +445,7 @@ impl Pane for InstrumentEditPane {
             "piano:octave_up" => { self.piano.octave_up(); Action::None }
             "piano:key" | "piano:space" => {
                 if let KeyCode::Char(c) = event.key {
+                    let c = translate_key(c, state.keyboard_layout);
                     if let Some(pitches) = self.piano.key_to_pitches(c) {
                         if pitches.len() == 1 {
                             return Action::Instrument(InstrumentAction::PlayNote(pitches[0], 100));

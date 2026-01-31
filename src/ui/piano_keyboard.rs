@@ -1,3 +1,39 @@
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum KeyboardLayout {
+    #[default]
+    Qwerty,
+    Colemak,
+}
+
+/// Translate a key character from the configured layout to QWERTY physical position.
+pub fn translate_key(c: char, layout: KeyboardLayout) -> char {
+    match layout {
+        KeyboardLayout::Qwerty => c,
+        KeyboardLayout::Colemak => colemak_to_qwerty(c),
+    }
+}
+
+fn colemak_to_qwerty(c: char) -> char {
+    match c {
+        // top row
+        'f' => 'e', 'p' => 'r', 'g' => 't', 'j' => 'y',
+        'l' => 'u', 'u' => 'i', 'y' => 'o', ';' => 'p',
+        // home row
+        'r' => 's', 's' => 'd', 't' => 'f', 'd' => 'g',
+        'n' => 'j', 'e' => 'k', 'i' => 'l', 'o' => ';',
+        // bottom row
+        'k' => 'n',
+        // uppercase (Stradella shifted rows)
+        'F' => 'E', 'P' => 'R', 'G' => 'T', 'J' => 'Y',
+        'L' => 'U', 'U' => 'I', 'Y' => 'O', ':' => 'P',
+        'R' => 'S', 'S' => 'D', 'T' => 'F', 'D' => 'G',
+        'N' => 'J', 'E' => 'K', 'I' => 'L', 'O' => ':',
+        'K' => 'N',
+        // unchanged keys pass through
+        other => other,
+    }
+}
+
 /// Piano keyboard layout starting note.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PianoLayout {

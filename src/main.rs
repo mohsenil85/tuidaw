@@ -43,6 +43,7 @@ enum InstrumentSelectMode {
 fn run(backend: &mut RatatuiBackend) -> std::io::Result<()> {
     let config = config::Config::load();
     let mut state = AppState::new_with_defaults(config.defaults());
+    state.keyboard_layout = config.keyboard_layout();
 
     // Load keybindings from embedded TOML (with optional user override)
     let (layers, mut keymaps) = keybindings::load_keybindings();

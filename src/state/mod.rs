@@ -19,11 +19,14 @@ pub use param::{Param, ParamValue};
 pub use sampler::BufferId;
 pub use session::{MixerSelection, MusicalSettings, SessionState, MAX_BUSES};
 
+use crate::ui::KeyboardLayout;
+
 /// Top-level application state, owned by main.rs and passed to panes by reference.
 pub struct AppState {
     pub session: SessionState,
     pub instruments: InstrumentState,
     pub audio_in_waveform: Option<Vec<f32>>,
+    pub keyboard_layout: KeyboardLayout,
 }
 
 impl AppState {
@@ -33,6 +36,7 @@ impl AppState {
             session: SessionState::new(),
             instruments: InstrumentState::new(),
             audio_in_waveform: None,
+            keyboard_layout: KeyboardLayout::default(),
         }
     }
 
@@ -41,6 +45,7 @@ impl AppState {
             session: SessionState::new_with_defaults(defaults),
             instruments: InstrumentState::new(),
             audio_in_waveform: None,
+            keyboard_layout: KeyboardLayout::default(),
         }
     }
 

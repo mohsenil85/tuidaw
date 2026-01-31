@@ -8,7 +8,7 @@ use ratatui::widgets::{Block, Borders, Paragraph, Widget};
 use crate::state::piano_roll::PianoRollState;
 use crate::state::AppState;
 use crate::ui::layout_helpers::center_rect;
-use crate::ui::{Action, Color, InputEvent, KeyCode, Keymap, MouseEvent, MouseEventKind, MouseButton, Pane, PianoKeyboard, PianoRollAction, Style, ToggleResult};
+use crate::ui::{Action, Color, InputEvent, KeyCode, Keymap, MouseEvent, MouseEventKind, MouseButton, Pane, PianoKeyboard, PianoRollAction, Style, ToggleResult, translate_key};
 
 /// MIDI note name for a given pitch (0-127)
 fn note_name(pitch: u8) -> String {
@@ -376,7 +376,7 @@ impl Pane for PianoRollPane {
         "piano_roll"
     }
 
-    fn handle_action(&mut self, action: &str, event: &InputEvent, _state: &AppState) -> Action {
+    fn handle_action(&mut self, action: &str, event: &InputEvent, state: &AppState) -> Action {
         match action {
             // Piano mode actions (from piano layer)
             "piano:escape" => {
@@ -403,6 +403,7 @@ impl Pane for PianoRollPane {
             "piano:space" => Action::PianoRoll(PianoRollAction::PlayStopRecord),
             "piano:key" => {
                 if let KeyCode::Char(c) = event.key {
+                    let c = translate_key(c, state.keyboard_layout);
                     if let Some(pitches) = self.piano.key_to_pitches(c) {
                         if pitches.len() == 1 {
                             return Action::PianoRoll(PianoRollAction::PlayNote(pitches[0], 100));

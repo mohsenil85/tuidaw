@@ -4,6 +4,7 @@ use serde::Deserialize;
 
 use crate::state::music::{Key, Scale};
 use crate::state::MusicalSettings;
+use crate::ui::KeyboardLayout;
 
 const DEFAULT_CONFIG: &str = include_str!("../config.toml");
 
@@ -21,6 +22,7 @@ struct DefaultsConfig {
     tuning_a4: Option<f32>,
     time_signature: Option<[u8; 2]>,
     snap: Option<bool>,
+    keyboard_layout: Option<String>,
 }
 
 pub struct Config {
@@ -45,6 +47,14 @@ impl Config {
         Config {
             defaults: base.defaults,
         }
+    }
+
+    pub fn keyboard_layout(&self) -> KeyboardLayout {
+        self.defaults
+            .keyboard_layout
+            .as_deref()
+            .and_then(parse_keyboard_layout)
+            .unwrap_or_default()
     }
 
     pub fn defaults(&self) -> MusicalSettings {
@@ -97,6 +107,9 @@ fn merge_defaults(base: &mut DefaultsConfig, user: DefaultsConfig) {
     if user.snap.is_some() {
         base.snap = user.snap;
     }
+    if user.keyboard_layout.is_some() {
+        base.keyboard_layout = user.keyboard_layout;
+    }
 }
 
 fn parse_key(s: &str) -> Option<Key> {
@@ -113,6 +126,14 @@ fn parse_key(s: &str) -> Option<Key> {
         "A" => Some(Key::A),
         "A#" | "As" => Some(Key::As),
         "B" => Some(Key::B),
+        _ => None,
+    }
+}
+
+fn parse_keyboard_layout(s: &str) -> Option<KeyboardLayout> {
+    match s.to_lowercase().as_str() {
+        "qwerty" => Some(KeyboardLayout::Qwerty),
+        "colemak" => Some(KeyboardLayout::Colemak),
         _ => None,
     }
 }
@@ -148,6 +169,7 @@ mod tests {
         assert!((defaults.tuning_a4 - 440.0).abs() < f32::EPSILON);
         assert_eq!(defaults.time_signature, (4, 4));
         assert!(!defaults.snap);
+        assert_eq!(config.keyboard_layout(), KeyboardLayout::Colemak);
     }
 
     #[test]

@@ -17,6 +17,6 @@ pub use keymap::Keymap;
 pub use layer::{LayerResult, LayerStack};
 pub use pad_keyboard::PadKeyboard;
 pub use pane::{Action, ChopperAction, FileSelectAction, InstrumentAction, MixerAction, NavAction, Pane, PaneManager, PianoRollAction, SequencerAction, ServerAction, SessionAction, ToggleResult};
-pub use piano_keyboard::PianoKeyboard;
+pub use piano_keyboard::{KeyboardLayout, PianoKeyboard, translate_key};
 pub use ratatui_impl::RatatuiBackend;
 pub use style::{Color, Style};

@@ -5,3 +5,4 @@ scale = "Major"
 tuning_a4 = 440.0
 time_signature = [4, 4]
 snap = false
+keyboard_layout = "colemak"

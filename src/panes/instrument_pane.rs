@@ -7,7 +7,7 @@ use ratatui::widgets::{Block, Borders, Paragraph, Widget};
 
 use crate::state::{AppState, SourceType};
 use crate::ui::layout_helpers::center_rect;
-use crate::ui::{Action, NavAction, InstrumentAction, SessionAction, Color, InputEvent, KeyCode, Keymap, MouseEvent, MouseEventKind, MouseButton, PadKeyboard, Pane, PianoKeyboard, Style, ToggleResult};
+use crate::ui::{Action, NavAction, InstrumentAction, SessionAction, Color, InputEvent, KeyCode, Keymap, MouseEvent, MouseEventKind, MouseButton, PadKeyboard, Pane, PianoKeyboard, Style, ToggleResult, translate_key};
 
 fn source_color(source: SourceType) -> Color {
     match source {
@@ -112,6 +112,7 @@ impl Pane for InstrumentPane {
             "piano:octave_up" => { self.piano.octave_up(); Action::None }
             "piano:key" | "piano:space" => {
                 if let KeyCode::Char(c) = event.key {
+                    let c = translate_key(c, state.keyboard_layout);
                     if let Some(pitches) = self.piano.key_to_pitches(c) {
                         if pitches.len() == 1 {
                             return Action::Instrument(InstrumentAction::PlayNote(pitches[0], 100));
@@ -130,6 +131,7 @@ impl Pane for InstrumentPane {
             }
             "pad:key" => {
                 if let KeyCode::Char(c) = event.key {
+                    let c = translate_key(c, state.keyboard_layout);
                     if let Some(pad_idx) = self.pad_keyboard.key_to_pad(c) {
                         return Action::Instrument(InstrumentAction::PlayDrumPad(pad_idx));
                     }
