@@ -579,6 +579,20 @@ impl AudioEngine {
                     ("out".to_string(), effect_out_bus as f32),
                 ];
                 for p in &effect.params {
+                    // For SidechainComp, resolve sc_bus to actual SC audio bus number
+                    if effect.effect_type == EffectType::SidechainComp && p.name == "sc_bus" {
+                        let bus_id = match &p.value {
+                            ParamValue::Int(v) => *v as u8,
+                            _ => 0,
+                        };
+                        let sidechain_in = if bus_id == 0 {
+                            0.0 // SynthDef uses self as sidechain
+                        } else {
+                            self.bus_audio_buses.get(&bus_id).copied().unwrap_or(0) as f32
+                        };
+                        params.push(("sidechain_in".to_string(), sidechain_in));
+                        continue;
+                    }
                     let val = match &p.value {
                         ParamValue::Float(v) => *v,
                         ParamValue::Int(v) => *v as f32,
@@ -778,7 +792,7 @@ impl AudioEngine {
 
         // Sampler instruments need special handling
         if instrument.source.is_sample() {
-            return self.spawn_sampler_voice(instrument_id, pitch, velocity, offset_secs, state);
+            return self.spawn_sampler_voice(instrument_id, pitch, velocity, offset_secs, state, session);
         }
 
         let client = self.client.as_ref().ok_or("Not connected")?;
@@ -812,7 +826,8 @@ impl AudioEngine {
         let voice_vel_bus = self.next_voice_control_bus;
         self.next_voice_control_bus += 1;
 
-        let freq = 440.0 * (2.0_f64).powf((pitch as f64 - 69.0) / 12.0);
+        let tuning = session.tuning_a4 as f64;
+        let freq = tuning * (2.0_f64).powf((pitch as f64 - 69.0) / 12.0);
 
         let mut messages: Vec<rosc::OscMessage> = Vec::new();
 
@@ -925,6 +940,7 @@ impl AudioEngine {
         velocity: f32,
         offset_secs: f64,
         state: &InstrumentState,
+        session: &SessionState,
     ) -> Result<(), String> {
         let instrument = state.instrument(instrument_id)
             .ok_or_else(|| format!("No instrument with id {}", instrument_id))?;
@@ -975,7 +991,8 @@ impl AudioEngine {
         let voice_vel_bus = self.next_voice_control_bus;
         self.next_voice_control_bus += 1;
 
-        let freq = 440.0 * (2.0_f64).powf((pitch as f64 - 69.0) / 12.0);
+        let tuning = session.tuning_a4 as f64;
+        let freq = tuning * (2.0_f64).powf((pitch as f64 - 69.0) / 12.0);
 
         let mut messages: Vec<rosc::OscMessage> = Vec::new();
 

@@ -6,9 +6,9 @@ var dir = thisProcess.nowExecutingPath.dirname;
 // ============================================================================
 // MIDI - Note source that outputs freq/gate/vel on control buses
 // ============================================================================
-SynthDef(\ilex_midi, { |freq_out=0, gate_out=0, vel_out=0, note=60, vel=0.8, gate=1|
+SynthDef(\ilex_midi, { |freq_out=0, gate_out=0, vel_out=0, note=60, freq=440, vel=0.8, gate=1|
     var env = EnvGen.kr(Env.asr(0.001, 1, 0.01), gate, doneAction: 2);
-    ReplaceOut.kr(freq_out, note.midicps);
+    ReplaceOut.kr(freq_out, freq);
     ReplaceOut.kr(gate_out, env);
     ReplaceOut.kr(vel_out, vel);
 }).writeDefFile(dir);
@@ -202,6 +202,35 @@ SynthDef(\ilex_gate, { |in=1024, out=1026, rate=4, depth=1, shape=1|
     var saw = LFSaw.kr(rate).range(1 - depth, 1);
     var lfo = Select.kr(shape, [sine, square, saw]);
     Out.ar(out, sig * lfo);
+}).writeDefFile(dir);
+
+// Tape Compressor - warm analog-style compression with saturation
+SynthDef(\ilex_tape_comp, { |in=1024, out=1026, drive=1.5, threshold=0.5, ratio=3, makeup=1.0, mix=1.0|
+    var sig = In.ar(in, 2);
+    var driven = (sig * drive).tanh;
+    var compressed = Compander.ar(driven, driven,
+        thresh: threshold,
+        slopeBelow: 1.0,
+        slopeAbove: ratio.reciprocal,
+        clampTime: 0.01,
+        relaxTime: 0.1
+    );
+    var output = compressed * makeup;
+    Out.ar(out, (sig * (1 - mix)) + (output * mix));
+}).writeDefFile(dir);
+
+// Sidechain Compressor - driven by external bus signal
+SynthDef(\ilex_sc_comp, { |in=1024, out=1026, sidechain_in=0, threshold=0.3, ratio=4, attack=0.01, release=0.1, mix=1.0|
+    var sig = In.ar(in, 2);
+    var scSig = Select.ar(sidechain_in > 0, [sig, In.ar(sidechain_in, 2)]);
+    var compressed = Compander.ar(sig, scSig,
+        thresh: threshold,
+        slopeBelow: 1.0,
+        slopeAbove: ratio.reciprocal,
+        clampTime: attack,
+        relaxTime: release
+    );
+    Out.ar(out, (sig * (1 - mix)) + (compressed * mix));
 }).writeDefFile(dir);
 
 // ============================================================================

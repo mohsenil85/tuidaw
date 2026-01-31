@@ -643,6 +643,11 @@ fn dispatch_session(
             state.session.piano_roll.bpm = state.session.bpm as f32;
             panes.switch_to("instrument", &*state);
         }
+        SessionAction::UpdateSessionLive(ref settings) => {
+            state.session.apply_musical_settings(settings);
+            state.session.piano_roll.time_signature = state.session.time_signature;
+            state.session.piano_roll.bpm = state.session.bpm as f32;
+        }
         SessionAction::OpenFileBrowser(ref file_action) => {
             if let Some(fb) = panes.get_pane_mut::<FileBrowserPane>("file_browser") {
                 fb.open_for(file_action.clone(), None);

@@ -549,7 +549,9 @@ impl Pane for InstrumentEditPane {
                     match self.effects.last().unwrap().effect_type {
                         EffectType::Delay => EffectType::Reverb,
                         EffectType::Reverb => EffectType::Gate,
-                        EffectType::Gate => EffectType::Delay,
+                        EffectType::Gate => EffectType::TapeComp,
+                        EffectType::TapeComp => EffectType::SidechainComp,
+                        EffectType::SidechainComp => EffectType::Delay,
                     }
                 };
                 self.effects.push(EffectSlot::new(next_type));

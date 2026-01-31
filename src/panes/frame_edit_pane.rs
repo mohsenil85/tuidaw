@@ -158,7 +158,7 @@ impl Pane for FrameEditPane {
                     }
                     self.editing = false;
                     self.edit_input.set_focused(false);
-                    return Action::None;
+                    return Action::Session(SessionAction::UpdateSessionLive(self.settings.clone()));
                 }
                 KeyCode::Escape => {
                     self.editing = false;
@@ -187,11 +187,11 @@ impl Pane for FrameEditPane {
             }
             Some("decrease") => {
                 self.adjust(false);
-                Action::None
+                Action::Session(SessionAction::UpdateSessionLive(self.settings.clone()))
             }
             Some("increase") => {
                 self.adjust(true);
-                Action::None
+                Action::Session(SessionAction::UpdateSessionLive(self.settings.clone()))
             }
             Some("confirm") => {
                 // For numeric fields, enter text editing; for others, confirm

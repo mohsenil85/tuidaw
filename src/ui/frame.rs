@@ -25,10 +25,10 @@ pub struct Frame {
     master_peak: f32,
     /// Smoothed display value (fast attack, slow decay)
     peak_display: f32,
-    /// Previous view for back navigation (backtick)
-    pub back_view: Option<ViewState>,
-    /// Forward view for forward navigation (backslash)
-    pub forward_view: Option<ViewState>,
+    /// Navigation history (browser-style)
+    pub view_history: Vec<ViewState>,
+    /// Current position in view_history
+    pub history_cursor: usize,
 }
 
 impl Frame {
@@ -38,8 +38,8 @@ impl Frame {
             master_mute: false,
             master_peak: 0.0,
             peak_display: 0.0,
-            back_view: None,
-            forward_view: None,
+            view_history: Vec::new(),
+            history_cursor: 0,
         }
     }
 

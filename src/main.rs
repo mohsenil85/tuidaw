@@ -271,9 +271,18 @@ fn handle_global_action(
     // Helper for pane switching with view history
     let switch_to_pane = |target: &str, panes: &mut PaneManager, state: &mut AppState, app_frame: &mut Frame| {
         let current = capture_view(panes, state);
-        app_frame.back_view = Some(current);
-        app_frame.forward_view = None;
+        if app_frame.view_history.is_empty() {
+            app_frame.view_history.push(current);
+        } else {
+            app_frame.view_history[app_frame.history_cursor] = current;
+        }
+        // Truncate forward history
+        app_frame.view_history.truncate(app_frame.history_cursor + 1);
+        // Switch and record new view
         panes.switch_to(target, &*state);
+        let new_view = capture_view(panes, state);
+        app_frame.view_history.push(new_view);
+        app_frame.history_cursor = app_frame.view_history.len() - 1;
     };
 
     match action {
@@ -319,18 +328,63 @@ fn handle_global_action(
         "switch:logo" => {
             switch_to_pane("logo", panes, state, app_frame);
         }
+        "switch:frame_edit" => {
+            if panes.active().id() == "frame_edit" {
+                panes.pop(&*state);
+            } else {
+                panes.push_to("frame_edit", &*state);
+            }
+        }
         "nav_back" => {
-            if let Some(back) = app_frame.back_view.take() {
+            let history = &mut app_frame.view_history;
+            if !history.is_empty() {
+                // Save current live state into history
                 let current = capture_view(panes, state);
-                app_frame.forward_view = Some(current);
-                restore_view(panes, state, &back);
+                history[app_frame.history_cursor] = current;
+
+                let at_front = app_frame.history_cursor == history.len() - 1;
+                if at_front {
+                    // Go back 1
+                    if app_frame.history_cursor > 0 {
+                        app_frame.history_cursor -= 1;
+                        let view = history[app_frame.history_cursor].clone();
+                        restore_view(panes, state, &view);
+                    }
+                } else {
+                    // Go forward 1
+                    if app_frame.history_cursor < history.len() - 1 {
+                        app_frame.history_cursor += 1;
+                        let view = history[app_frame.history_cursor].clone();
+                        restore_view(panes, state, &view);
+                    }
+                }
             }
         }
         "nav_forward" => {
-            if let Some(forward) = app_frame.forward_view.take() {
+            let history = &mut app_frame.view_history;
+            if !history.is_empty() {
+                // Save current live state into history
                 let current = capture_view(panes, state);
-                app_frame.back_view = Some(current);
-                restore_view(panes, state, &forward);
+                history[app_frame.history_cursor] = current;
+
+                let at_front = app_frame.history_cursor == history.len() - 1;
+                if at_front {
+                    // Go back 2
+                    let target = app_frame.history_cursor.saturating_sub(2);
+                    if target != app_frame.history_cursor {
+                        app_frame.history_cursor = target;
+                        let view = history[app_frame.history_cursor].clone();
+                        restore_view(panes, state, &view);
+                    }
+                } else {
+                    // Go forward 2
+                    let target = (app_frame.history_cursor + 2).min(history.len() - 1);
+                    if target != app_frame.history_cursor {
+                        app_frame.history_cursor = target;
+                        let view = history[app_frame.history_cursor].clone();
+                        restore_view(panes, state, &view);
+                    }
+                }
             }
         }
         "help" => {

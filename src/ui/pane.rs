@@ -133,6 +133,7 @@ pub enum SessionAction {
     Save,
     Load,
     UpdateSession(MusicalSettings),
+    UpdateSessionLive(MusicalSettings),
     OpenFileBrowser(FileSelectAction),
     ImportCustomSynthDef(PathBuf),
 }

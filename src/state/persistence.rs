@@ -1244,7 +1244,11 @@ fn load_effects(conn: &SqlConnection, instruments: &mut [Instrument]) -> SqlResu
 
             for (name, value) in params {
                 if let Some(p) = slot.params.iter_mut().find(|p| p.name == name) {
-                    p.value = ParamValue::Float(value as f32);
+                    p.value = match &p.value {
+                        ParamValue::Int(_) => ParamValue::Int(value as i32),
+                        ParamValue::Bool(_) => ParamValue::Bool(value != 0.0),
+                        _ => ParamValue::Float(value as f32),
+                    };
                 }
             }
 
@@ -2071,6 +2075,9 @@ fn parse_effect_type(s: &str) -> EffectType {
     match s {
         "delay" => EffectType::Delay,
         "reverb" => EffectType::Reverb,
+        "gate" => EffectType::Gate,
+        "tapecomp" => EffectType::TapeComp,
+        "sidechaincomp" => EffectType::SidechainComp,
         _ => EffectType::Delay,
     }
 }

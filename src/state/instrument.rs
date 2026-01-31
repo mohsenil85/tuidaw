@@ -278,6 +278,8 @@ pub enum EffectType {
     Delay,
     Reverb,
     Gate,
+    TapeComp,
+    SidechainComp,
 }
 
 impl EffectType {
@@ -286,6 +288,8 @@ impl EffectType {
             EffectType::Delay => "Delay",
             EffectType::Reverb => "Reverb",
             EffectType::Gate => "Gate",
+            EffectType::TapeComp => "Tape Comp",
+            EffectType::SidechainComp => "SC Comp",
         }
     }
 
@@ -294,6 +298,8 @@ impl EffectType {
             EffectType::Delay => "ilex_delay",
             EffectType::Reverb => "ilex_reverb",
             EffectType::Gate => "ilex_gate",
+            EffectType::TapeComp => "ilex_tape_comp",
+            EffectType::SidechainComp => "ilex_sc_comp",
         }
     }
 
@@ -314,12 +320,27 @@ impl EffectType {
                 Param { name: "depth".to_string(), value: ParamValue::Float(1.0), min: 0.0, max: 1.0 },
                 Param { name: "shape".to_string(), value: ParamValue::Int(1), min: 0.0, max: 2.0 }, // 0=sine, 1=square, 2=saw
             ],
+            EffectType::TapeComp => vec![
+                Param { name: "drive".to_string(), value: ParamValue::Float(1.5), min: 1.0, max: 8.0 },
+                Param { name: "threshold".to_string(), value: ParamValue::Float(0.5), min: 0.01, max: 1.0 },
+                Param { name: "ratio".to_string(), value: ParamValue::Float(3.0), min: 1.0, max: 20.0 },
+                Param { name: "makeup".to_string(), value: ParamValue::Float(1.0), min: 0.0, max: 4.0 },
+                Param { name: "mix".to_string(), value: ParamValue::Float(1.0), min: 0.0, max: 1.0 },
+            ],
+            EffectType::SidechainComp => vec![
+                Param { name: "sc_bus".to_string(), value: ParamValue::Int(0), min: 0.0, max: 8.0 }, // 0=self, 1-8=mixer bus
+                Param { name: "threshold".to_string(), value: ParamValue::Float(0.3), min: 0.01, max: 1.0 },
+                Param { name: "ratio".to_string(), value: ParamValue::Float(4.0), min: 1.0, max: 20.0 },
+                Param { name: "attack".to_string(), value: ParamValue::Float(0.01), min: 0.001, max: 0.5 },
+                Param { name: "release".to_string(), value: ParamValue::Float(0.1), min: 0.01, max: 2.0 },
+                Param { name: "mix".to_string(), value: ParamValue::Float(1.0), min: 0.0, max: 1.0 },
+            ],
         }
     }
 
     #[allow(dead_code)]
     pub fn all() -> Vec<EffectType> {
-        vec![EffectType::Delay, EffectType::Reverb, EffectType::Gate]
+        vec![EffectType::Delay, EffectType::Reverb, EffectType::Gate, EffectType::TapeComp, EffectType::SidechainComp]
     }
 }
 
